@@ -31,5 +31,14 @@ export default defineSchema({
     .index("by_timestamp", ["timestamp"])
     .index("by_jeepneyId", ["jeepneyId"])
     .index("by_jeepney_timestamp", ["jeepneyId", "timestamp"])
-    .index("by_isResolved_timestamp", ["isResolved", "timestamp"])
+    .index("by_isResolved_timestamp", ["isResolved", "timestamp"]),
+
+  users: defineTable({
+    name: v.string(),
+    email: v.string(),
+    role: v.string(),
+    tokenIdentifier: v.optional(v.string())
+  })
+    .index("by_email", ["email"])
+    .index("by_tokenIdentifier", ["tokenIdentifier"])
 });
