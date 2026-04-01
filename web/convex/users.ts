@@ -21,6 +21,7 @@ export const getCurrentUserRole = query({
   handler: async (ctx) => {
     const user = await getUserByIdentityToken(ctx);
     return user?.role ?? "guest";
+    
   },
 });
 
@@ -50,5 +51,27 @@ export const createUser = mutation({
       role: args.role,
       tokenIdentifier: args.tokenIdentifier,
     });
+  },
+});
+
+export const updateUserRole = mutation({
+  args: {
+    userId: v.id("users"),
+    newRole: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const currentUser = await getUserByIdentityToken(ctx);
+    if (!currentUser) {
+      throw new Error("Unauthorized: authentication required");
+    }
+    if (currentUser.role !== "operator") {
+      throw new Error("Unauthorized: operator role required");
+    }
+
+    if (!["operator", "driver", "guest"].includes(args.newRole)) {
+      throw new Error("Invalid role");
+    }
+
+    await ctx.db.patch(args.userId, { role: args.newRole });
   },
 });
