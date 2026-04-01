@@ -91,7 +91,10 @@ export function UsersDirectory() {
                         user.role ?? "guest"
                       )}`}
                       value={user.role ?? "guest"}
-                      onChange={(event) => handleRoleChange(user._id, event.target.value)}
+                      onChange={(e) => {
+                        if (!user._id) return; // This line satisfies TypeScript!
+                        updateUserRole({ userId: user._id, newRole: e.target.value });
+                      }}
                       disabled={updatingUserId === user._id}
                     >
                       <option value="operator">Operator</option>
@@ -116,4 +119,5 @@ export function UsersDirectory() {
       </div>
     </section>
   );
+  
 }
