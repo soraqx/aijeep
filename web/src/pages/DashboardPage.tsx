@@ -367,10 +367,10 @@ export function DashboardPage() {
                                 <td className="px-3 py-2.5">
                                   <span
                                     className={`rounded-full px-2.5 py-1 text-xs font-medium ${row.status === "Normal"
-                                        ? "bg-emerald-100 text-emerald-700"
-                                        : row.status === "Monitoring"
-                                          ? "bg-blue-100 text-blue-700"
-                                          : "bg-amber-100 text-amber-700"
+                                      ? "bg-emerald-100 text-emerald-700"
+                                      : row.status === "Monitoring"
+                                        ? "bg-blue-100 text-blue-700"
+                                        : "bg-amber-100 text-amber-700"
                                       }`}
                                   >
                                     {row.status}
@@ -414,6 +414,7 @@ export function DashboardPage() {
                               </p>
                             </div>
                           </li>
+                        );
                       })}
                     </ul>
                   ) : (
