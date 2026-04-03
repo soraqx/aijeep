@@ -21,6 +21,7 @@ import "leaflet/dist/leaflet.css";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import { api } from "../../convex/_generated/api";
 import { UsersDirectory } from "../components/UsersDirectory";
+import { LiveMapView } from "../components/LiveMapView";
 
 // Types matching Convex schema
 type Jeepney = {
@@ -426,7 +427,7 @@ export function DashboardPage() {
           )}
 
           {activeTab === "live-map" && (
-            <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+            <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 overflow-hidden">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-slate-800 sm:text-base">Live Map View</h2>
                 <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
@@ -437,30 +438,14 @@ export function DashboardPage() {
                 <LoadingSpinner />
               ) : (
                 <div className="relative z-0 h-[420px] w-full overflow-hidden rounded-xl border border-slate-300 bg-slate-100 sm:h-[500px]">
-                  <MapContainer center={metroManilaCenter} zoom={13} scrollWheelZoom className="h-full w-full">
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    {Array.from(jeepneyPositions).map((telemetry: Telemetry) => {
-                      const gpsPosition = parseGPS(telemetry.gps);
-                      const jeepney = jeepneyData?.find((j: Jeepney) => j._id === telemetry.jeepneyId);
-                      const accel = calculateAcceleration(telemetry.accelX, telemetry.accelY, telemetry.accelZ);
-                      const status = determineStatus(telemetry.earValue, accel);
-                      return (
-                        <Marker key={telemetry.jeepneyId} position={gpsPosition} icon={jeepneyIcon}>
-                          <Popup>
-                            <div className="text-sm">
-                              <p className="font-semibold">{jeepney?.plateNumber || "Unknown"}</p>
-                              <p className="text-xs text-slate-600">Driver: {jeepney?.driverName || "Unknown"}</p>
-                              <p className="text-xs">Status: {status}</p>
-                              <p className="text-xs">EAR: {telemetry.earValue.toFixed(2)}</p>
-                            </div>
-                          </Popup>
-                        </Marker>
-                      );
-                    })}
-                  </MapContainer>
+                  <LiveMapView
+                    telemetryData={telemetryData}
+                    jeepneyData={jeepneyData}
+                    calculateAcceleration={calculateAcceleration}
+                    determineStatus={determineStatus}
+                    parseGPS={parseGPS}
+                    jeepneyIcon={jeepneyIcon}
+                  />
                 </div>
               )}
             </section>
