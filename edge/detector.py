@@ -10,7 +10,7 @@ Responsibilities:
 """
 
 from __future__ import annotations
-
+from utils import get_model_path
 import math
 import os
 import time
@@ -190,12 +190,8 @@ def main() -> None:
     # ---------------------------
     # Load ML model
     # ---------------------------
-    model_path = Path(__file__).resolve().parent / "models" / "rf_model.pkl"
-    if not model_path.exists():
-        raise FileNotFoundError(
-            f"Missing model at {model_path}. Place your trained Random Forest model there."
-        )
-
+    model_path = get_model_path()
+    
     try:
         model = joblib.load(model_path)
     except Exception as e:
