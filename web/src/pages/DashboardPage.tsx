@@ -14,6 +14,7 @@ import {
   Users,
   X,
   Loader,
+  Image,
 } from "lucide-react";
 import type { LatLngTuple } from "leaflet";
 import L from "leaflet";
@@ -22,6 +23,8 @@ import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import { api } from "../../convex/_generated/api";
 import { UsersDirectory } from "../components/UsersDirectory";
 import { LiveMapView } from "../components/LiveMapView";
+import { EmergencyBadge } from "../components/EmergencyBadge";
+import { AlertsGallery } from "../components/AlertsGallery";
 
 // Types matching Convex schema
 type Jeepney = {
@@ -112,7 +115,7 @@ function NavItem({ label, icon, active = false, onClick }: NavItemProps) {
   );
 }
 
-type DashboardTab = "overview" | "live-map" | "alerts" | "health" | "users";
+type DashboardTab = "overview" | "live-map" | "alerts" | "snapshot-alerts" | "health" | "users";
 
 /**
  * LoadingSpinner component for rendering a centered loading indicator.
@@ -234,9 +237,15 @@ export function DashboardPage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 sm:text-sm">
-            <Activity size={14} className="sm:h-4 sm:w-4" />
-            Live Monitoring
+          <div className="flex items-center gap-3">
+            {alertCount > 0 ? (
+              <EmergencyBadge show={true} message={`${alertCount} ACTIVE ALERTS`} />
+            ) : (
+              <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 sm:text-sm">
+                <Activity size={14} className="sm:h-4 sm:w-4" />
+                Live Monitoring
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -283,6 +292,12 @@ export function DashboardPage() {
               icon={<Siren size={16} />}
               active={activeTab === "alerts"}
               onClick={() => onTabChange("alerts")}
+            />
+            <NavItem
+              label="Alert Snapshots"
+              icon={<Image size={16} />}
+              active={activeTab === "snapshot-alerts"}
+              onClick={() => onTabChange("snapshot-alerts")}
             />
             <NavItem
               label="System Health"
@@ -496,6 +511,35 @@ export function DashboardPage() {
               ) : (
                 <p className="mt-4 text-center text-sm text-slate-500">No active alerts - all systems operating normally!</p>
               )}
+            </section>
+          )}
+
+          {activeTab === "snapshot-alerts" && (
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-base font-semibold text-slate-800">Active Alerts Gallery</h2>
+                {alertCount > 0 && (
+                  <span className="rounded-full border-2 border-red-500 bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
+                    {alertCount} Active
+                  </span>
+                )}
+              </div>
+              <AlertsGallery
+                alerts={
+                  alertData
+                    ?.filter((a: Alert) => !a.isResolved)
+                    .slice(0, 12)
+                    .map((alert: Alert) => ({
+                      id: alert._id,
+                      jeepneyId: alert.jeepneyId,
+                      alertType: alert.alertType as "DROWSY" | "HARSH_BRAKING" | "UNKNOWN",
+                      timestamp: alert.timestamp,
+                      confidenceScore: Math.random() * 0.3 + 0.7, // Mock confidence 70-100%
+                      snapshotFilename: `alert_${new Date(alert.timestamp * 1000).toISOString().replace(/[:-]/g, "").slice(0, 15)}.jpg`,
+                    })) || []
+                }
+                isLoading={alertData === undefined}
+              />
             </section>
           )}
 

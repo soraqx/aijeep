@@ -17,6 +17,7 @@ import time
 import json
 from pathlib import Path
 from typing import Optional, Tuple
+from datetime import datetime
 
 import cv2
 import joblib
@@ -157,6 +158,44 @@ def _safe_post(
         print(f"[HTTP] POST error: {e.__class__.__name__}: {e}")
 
 
+def _save_alert_snapshot(
+    frame: any,
+    alerts_dir: str,
+    timestamp: Optional[int] = None,
+) -> Optional[str]:
+    """
+    Save a snapshot to the alerts directory with a timestamped filename.
+    
+    Args:
+        frame: The OpenCV frame (BGR format) to save.
+        alerts_dir: Path to the alerts directory.
+        timestamp: Unix timestamp. If None, uses current time.
+    
+    Returns:
+        Filename (without path) if successful, None otherwise.
+    """
+    try:
+        Path(alerts_dir).mkdir(parents=True, exist_ok=True)
+        
+        if timestamp is None:
+            timestamp = int(time.time())
+        
+        dt = datetime.utcfromtimestamp(timestamp)
+        filename = dt.strftime("alert_%Y%m%d_%H%M%S.jpg")
+        filepath = os.path.join(alerts_dir, filename)
+        
+        success = cv2.imwrite(filepath, frame)
+        if success:
+            print(f"[Alert] Snapshot saved: {filename}")
+            return filename
+        else:
+            print(f"[Alert] Failed to write snapshot: {filepath}")
+            return None
+    except Exception as e:
+        print(f"[Alert] Snapshot save error: {e.__class__.__name__}: {e}")
+        return None
+
+
 def main() -> None:
     print("AI-JEEP edge detector starting...")
 
@@ -173,11 +212,17 @@ def main() -> None:
 
     TELEMETRY_INTERVAL_SEC = float(os.environ.get("TELEMETRY_INTERVAL_SEC", "1.0"))
     ALERT_COOLDOWN_SEC = float(os.environ.get("ALERT_COOLDOWN_SEC", "10.0"))
+    SNAPSHOT_COOLDOWN_SEC = float(os.environ.get("SNAPSHOT_COOLDOWN_SEC", "5.0"))
     REQUEST_TIMEOUT_SEC = float(os.environ.get("REQUEST_TIMEOUT_SEC", "5.0"))
 
     CONVEX_SITE_URL = CONVEX_SITE_URL.rstrip("/")
     TELEMETRY_URL = f"{CONVEX_SITE_URL}/api/telemetry"
     ALERTS_URL = f"{CONVEX_SITE_URL}/api/alerts"
+
+    # Determine alerts directory (use relative./alerts or absolute path)
+    ALERTS_DIR = os.environ.get("ALERTS_DIR", "./alerts")
+    if not os.path.isabs(ALERTS_DIR):
+        ALERTS_DIR = os.path.join(os.path.dirname(__file__), ALERTS_DIR)
 
     GPS_DUMMY = "14.5995, 120.9842"
 
@@ -245,6 +290,7 @@ def main() -> None:
     last_telemetry_sent_mono = 0.0
     last_alert_sent_mono = 0.0
     last_alert_pred: Optional[int] = None
+    last_snapshot_saved_mono = 0.0
 
     # ---------------------------
     # Main loop
@@ -349,6 +395,13 @@ def main() -> None:
                     )
                     last_alert_sent_mono = now_mono
                     last_alert_pred = pred
+
+            # ---- Snapshot capture: cooldown on one anomaly == save one image ----
+            if pred in HAZARDOUS_PREDICTIONS:
+                if ret and frame is not None and (now_mono - last_snapshot_saved_mono >= SNAPSHOT_COOLDOWN_SEC):
+                    timestamp = int(time.time())
+                    _save_alert_snapshot(frame, ALERTS_DIR, timestamp)
+                    last_snapshot_saved_mono = now_mono
 
             # Small sleep to avoid maxing the CPU.
             elapsed = time.monotonic() - loop_start_mono
