@@ -273,7 +273,6 @@ def _upload_alert_snapshot(
     except Exception as e:
         print(f"[Alert] Snapshot error: {e.__class__.__name__}: {e}")
         return None
-        return None
 
 
 def main() -> None:
@@ -305,10 +304,7 @@ def main() -> None:
         ALERTS_DIR = os.path.join(os.path.dirname(__file__), ALERTS_DIR)
 
     # Alert snapshot upload configuration
-    BACKEND_ALERT_UPLOAD_URL = os.environ.get(
-        "https://exciting-meadowlark-962.convex.cloud",
-        None  # Optional - set when Convex endpoint is ready
-    )
+    BACKEND_ALERT_UPLOAD_URL = "https://exciting-meadowlark-962.convex.site/api/upload-alert"
 
     GPS_DUMMY = "14.5995, 120.9842"
 
