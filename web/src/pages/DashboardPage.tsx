@@ -25,6 +25,7 @@ import { UsersDirectory } from "../components/UsersDirectory";
 import { LiveMapView } from "../components/LiveMapView";
 import { EmergencyBadge } from "../components/EmergencyBadge";
 import { AlertsGallery } from "../components/AlertsGallery";
+import { AlertStatsHeader } from "../components/AlertStatsHeader";
 
 // Types matching Convex schema
 type Jeepney = {
@@ -163,6 +164,7 @@ export function DashboardPage() {
   const telemetryData = useQuery(api.telemetry.getLatest, { limit: 100 });
   const jeepneyData = useQuery(api.jeepneys.getAll, {});
   const alertData = useQuery(api.alerts.getActiveAlerts, {});
+  const alertStats = useQuery(api.alerts.getAlertStats, {});
 
   const metroManilaCenter: LatLngTuple = [14.5995, 120.9842];
 
@@ -515,34 +517,52 @@ export function DashboardPage() {
           )}
 
           {activeTab === "snapshot-alerts" && (
-            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-base font-semibold text-slate-800">Active Alerts Gallery</h2>
-                {alertCount > 0 && (
-                  <span className="rounded-full border-2 border-red-500 bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
-                    {alertCount} Active
-                  </span>
-                )}
+            <section className="space-y-6">
+              {/* Alert Statistics Header */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <AlertStatsHeader
+                  stats={alertStats || null}
+                  isLoading={alertStats === undefined}
+                />
               </div>
-              <AlertsGallery
-                alerts={
-                  alertData
-                    ?.filter((a: Alert) => !a.isResolved)
-                    .slice(0, 12)
-                    .map((alert: any) => ({
-                      id: alert._id,
-                      jeepneyId: alert.jeepneyId,
-                      alertType: (alert.alertType === "DROWSY" || alert.alertType === "HARSH_BRAKING"
-                        ? alert.alertType
-                        : "UNKNOWN") as "DROWSY" | "HARSH_BRAKING" | "UNKNOWN",
-                      timestamp: alert.timestamp,
-                      confidenceScore: alert.confidenceScore || 0.85,
-                      snapshotUrl: alert.imageUrl, // From Convex file storage
-                      snapshotFilename: alert.snapshotFilename,
-                    })) || []
-                }
-                isLoading={alertData === undefined}
-              />
+
+              {/* Alerts Gallery */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-base font-semibold text-slate-800">Active Alerts Gallery</h2>
+                  {alertCount > 0 && (
+                    <span className="rounded-full border-2 border-red-500 bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
+                      {alertCount} Active
+                    </span>
+                  )}
+                </div>
+                <AlertsGallery
+                  alerts={
+                    alertData
+                      ?.filter((a: any) => !a.isResolved)
+                      .slice(0, 12)
+                      .map((alert: any) => ({
+                        id: alert._id,
+                        _id: alert._id,
+                        jeepneyId: alert.jeepneyId,
+                        alertType: (alert.alertType === "DROWSY" || alert.alertType === "HARSH_BRAKING"
+                          ? alert.alertType
+                          : "UNKNOWN") as "DROWSY" | "HARSH_BRAKING" | "UNKNOWN",
+                        timestamp: alert.timestamp,
+                        confidenceScore: alert.confidenceScore || 0.85,
+                        snapshotUrl: alert.imageUrl,
+                        snapshotFilename: alert.snapshotFilename,
+                        isResolved: alert.isResolved || false,
+                        jeepneyInfo: alert.jeepneyInfo,
+                      })) || []
+                  }
+                  isLoading={alertData === undefined}
+                  onDismiss={(alertId) => {
+                    // Optional: handle UI refresh after dismiss
+                    console.log("Alert dismissed:", alertId);
+                  }}
+                />
+              </div>
             </section>
           )}
 

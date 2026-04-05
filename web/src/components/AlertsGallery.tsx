@@ -1,29 +1,45 @@
 import React, { useState, useEffect } from "react";
-import { Clock, AlertTriangle, Zap, X } from "lucide-react";
+import { Clock, AlertTriangle, Zap, X, CheckCircle2, Loader } from "lucide-react";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { Id } from "../../convex/_generated/dataModel";
+import { AlertDetailsModal } from "./AlertDetailsModal";
 
 interface AlertSnapshot {
     id: string;
+    _id?: Id<"alerts">;
     jeepneyId: string;
     alertType: "DROWSY" | "HARSH_BRAKING" | "UNKNOWN";
     timestamp: number;
     confidenceScore: number;
     snapshotUrl?: string;
     snapshotFilename?: string;
+    isResolved?: boolean;
+    jeepneyInfo?: {
+        plateNumber: string;
+        driverName: string;
+        status: string;
+    } | null;
 }
 
 interface AlertsGalleryProps {
     alerts: AlertSnapshot[];
     isLoading?: boolean;
+    onDismiss?: (alertId: string) => void;
 }
 
 /**
  * AlertsGallery displays a grid of recent alert snapshots with timestamps and confidence scores.
  * Each card shows the captured image, alert type, time, and ML model confidence.
+ * Includes dismiss button and click-to-details modal functionality.
  */
 export const AlertsGallery: React.FC<AlertsGalleryProps> = ({
     alerts = [],
     isLoading = false,
+    onDismiss,
 }) => {
+    const resolveAlertMutation = useMutation(api.alerts.resolveAlert);
+
     const getAlertIcon = (alertType: AlertSnapshot["alertType"]) => {
         switch (alertType) {
             case "DROWSY":
@@ -62,13 +78,29 @@ export const AlertsGallery: React.FC<AlertsGalleryProps> = ({
 
     // Individual alert card component
     const AlertCard: React.FC<{ alert: AlertSnapshot }> = ({ alert }) => {
-        const [viewerOpen, setViewerOpen] = useState(false);
+        const [detailsOpen, setDetailsOpen] = useState(false);
+        const [isDismissing, setIsDismissing] = useState(false);
+
+        const handleDismiss = async (e: React.MouseEvent) => {
+            e.stopPropagation();
+            if (!alert._id) return;
+
+            try {
+                setIsDismissing(true);
+                await resolveAlertMutation({ alertId: alert._id });
+                onDismiss?.(alert.id);
+            } catch (error) {
+                console.error("Failed to dismiss alert:", error);
+            } finally {
+                setIsDismissing(false);
+            }
+        };
 
         return (
             <>
                 <div
                     className={`group relative overflow-hidden rounded-xl border p-3 shadow-sm transition hover:shadow-md cursor-pointer ${getAlertColor(alert.alertType)}`}
-                    onClick={() => setViewerOpen(true)}
+                    onClick={() => setDetailsOpen(true)}
                 >
                     {/* Placeholder or actual snapshot image */}
                     <div className="aspect-video w-full overflow-hidden rounded-lg bg-gradient-to-br from-slate-300 to-slate-400 mb-3">
@@ -103,7 +135,7 @@ export const AlertsGallery: React.FC<AlertsGalleryProps> = ({
                         </div>
 
                         <div className="pt-2 border-t border-slate-200">
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between mb-1">
                                 <span className="text-xs font-semibold text-slate-600">
                                     Confidence
                                 </span>
@@ -111,84 +143,56 @@ export const AlertsGallery: React.FC<AlertsGalleryProps> = ({
                                     {(alert.confidenceScore * 100).toFixed(1)}%
                                 </span>
                             </div>
-                            <div className="mt-1 h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                            <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
                                 <div
                                     className="h-full bg-gradient-to-r from-amber-500 to-red-600"
                                     style={{ width: `${Math.min(alert.confidenceScore * 100, 100)}%` }}
                                 />
                             </div>
                         </div>
+
+                        {/* Dismiss Button */}
+                        <button
+                            onClick={handleDismiss}
+                            disabled={isDismissing || alert.isResolved}
+                            className="mt-3 w-full flex items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        >
+                            {isDismissing ? (
+                                <>
+                                    <Loader size={14} className="animate-spin" />
+                                    <span>Dismissing...</span>
+                                </>
+                            ) : alert.isResolved ? (
+                                <>
+                                    <CheckCircle2 size={14} />
+                                    <span>Dismissed</span>
+                                </>
+                            ) : (
+                                <>
+                                    <CheckCircle2 size={14} />
+                                    <span>Dismiss</span>
+                                </>
+                            )}
+                        </button>
                     </div>
                 </div>
 
-                {/* Full-screen image viewer modal */}
-                {viewerOpen && (
-                    <div
-                        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 p-4"
-                        onClick={() => setViewerOpen(false)}
-                    >
-                        <div className="relative max-w-2xl w-full" onClick={(e) => e.stopPropagation()}>
-                            <button
-                                onClick={() => setViewerOpen(false)}
-                                className="absolute top-2 right-2 z-10 rounded-full bg-slate-900 p-2 text-white hover:bg-slate-800"
-                                aria-label="Close image viewer"
-                            >
-                                <X size={18} />
-                            </button>
-
-                            <div className="rounded-lg overflow-hidden bg-black">
-                                {alert.snapshotUrl ? (
-                                    <img
-                                        src={alert.snapshotUrl}
-                                        alt={`Alert snapshot ${alert.id}`}
-                                        className="w-full object-contain max-h-[70vh]"
-                                    />
-                                ) : (
-                                    <div className="aspect-video w-full flex items-center justify-center bg-slate-800 text-slate-400">
-                                        <span>Image unavailable</span>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="mt-3 rounded-lg border border-slate-200 bg-white p-4">
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <p className="text-xs font-semibold text-slate-600 uppercase">
-                                            Alert Type
-                                        </p>
-                                        <p className="text-sm font-bold text-slate-900">
-                                            {alert.alertType.replace(/_/g, " ")}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-semibold text-slate-600 uppercase">
-                                            Confidence
-                                        </p>
-                                        <p className="text-sm font-bold text-slate-900">
-                                            {(alert.confidenceScore * 100).toFixed(1)}%
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-semibold text-slate-600 uppercase">
-                                            Date
-                                        </p>
-                                        <p className="text-sm font-bold text-slate-900">
-                                            {formatDate(alert.timestamp)}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-semibold text-slate-600 uppercase">
-                                            Time
-                                        </p>
-                                        <p className="text-sm font-bold text-slate-900">
-                                            {formatTime(alert.timestamp)}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                {/* Details Modal */}
+                <AlertDetailsModal
+                    alert={alert._id ? {
+                        _id: alert._id,
+                        jeepneyId: alert.jeepneyId as Id<"jeepneys">,
+                        alertType: alert.alertType,
+                        timestamp: alert.timestamp,
+                        confidenceScore: alert.confidenceScore,
+                        snapshotFilename: alert.snapshotFilename,
+                        imageUrl: alert.snapshotUrl,
+                        isResolved: alert.isResolved || false,
+                        jeepneyInfo: alert.jeepneyInfo,
+                    } : null}
+                    isOpen={detailsOpen}
+                    onClose={() => setDetailsOpen(false)}
+                />
             </>
         );
     };
