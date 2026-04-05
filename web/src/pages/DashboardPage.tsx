@@ -529,13 +529,16 @@ export function DashboardPage() {
                   alertData
                     ?.filter((a: Alert) => !a.isResolved)
                     .slice(0, 12)
-                    .map((alert: Alert) => ({
+                    .map((alert: any) => ({
                       id: alert._id,
                       jeepneyId: alert.jeepneyId,
-                      alertType: alert.alertType as "DROWSY" | "HARSH_BRAKING" | "UNKNOWN",
+                      alertType: (alert.alertType === "DROWSY" || alert.alertType === "HARSH_BRAKING"
+                        ? alert.alertType
+                        : "UNKNOWN") as "DROWSY" | "HARSH_BRAKING" | "UNKNOWN",
                       timestamp: alert.timestamp,
-                      confidenceScore: Math.random() * 0.3 + 0.7, // Mock confidence 70-100%
-                      snapshotFilename: `alert_${new Date(alert.timestamp * 1000).toISOString().replace(/[:-]/g, "").slice(0, 15)}.jpg`,
+                      confidenceScore: alert.confidenceScore || 0.85,
+                      snapshotUrl: alert.imageUrl, // From Convex file storage
+                      snapshotFilename: alert.snapshotFilename,
                     })) || []
                 }
                 isLoading={alertData === undefined}

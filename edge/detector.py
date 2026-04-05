@@ -196,6 +196,86 @@ def _save_alert_snapshot(
         return None
 
 
+def _upload_alert_snapshot(
+    frame: any,
+    alerts_dir: str,
+    jeepney_id: str,
+    alert_type: str,
+    timestamp: Optional[int] = None,
+    upload_url: Optional[str] = None,
+    timeout_sec: float = 5.0,
+) -> Optional[str]:
+    """
+    Save snapshot locally AND attempt to upload to backend.
+    
+    Args:
+        frame: OpenCV frame (BGR format)
+        alerts_dir: Local directory to store snapshots
+        jeepney_id: Jeepney identifier
+        alert_type: Type of alert (DROWSY, HARSH_BRAKING)
+        timestamp: Unix timestamp (defaults to now)
+        upload_url: Backend URL for upload (optional)
+        timeout_sec: HTTP timeout
+    
+    Returns:
+        Filename if saved successfully
+    """
+    try:
+        # Save locally first
+        Path(alerts_dir).mkdir(parents=True, exist_ok=True)
+        
+        if timestamp is None:
+            timestamp = int(time.time())
+        
+        dt = datetime.utcfromtimestamp(timestamp)
+        filename = dt.strftime("alert_%Y%m%d_%H%M%S.jpg")
+        filepath = os.path.join(alerts_dir, filename)
+        
+        success = cv2.imwrite(filepath, frame)
+        if not success:
+            print(f"[Alert] Failed to write snapshot: {filepath}")
+            return None
+        
+        print(f"[Alert] Snapshot saved locally: {filename}")
+        
+        # Try to upload if URL provided
+        if upload_url:
+            try:
+                ret, jpeg_buffer = cv2.imencode('.jpg', frame)
+                if not ret:
+                    print("[Alert] Failed to encode frame for upload")
+                    return filename
+                
+                files = {'image': ('alert.jpg', jpeg_buffer.tobytes(), 'image/jpeg')}
+                data = {
+                    'jeepneyId': jeepney_id,
+                    'alertType': alert_type,
+                    'timestamp': str(timestamp),
+                    'filename': filename,
+                }
+                
+                if requests is not None:
+                    resp = requests.post(
+                        upload_url,
+                        files=files,
+                        data=data,
+                        timeout=timeout_sec
+                    )
+                    if resp.status_code == 200:
+                        print(f"[Alert] Snapshot uploaded successfully: {filename}")
+                    else:
+                        print(f"[Alert] Upload failed ({resp.status_code}): {resp.text[:100]}")
+            except Exception as e:
+                print(f"[Alert] Upload error (continuing with local): {e.__class__.__name__}: {e}")
+        
+        return filename
+        
+    except Exception as e:
+        print(f"[Alert] Snapshot error: {e.__class__.__name__}: {e}")
+        return None
+        return None
+
+
 def main() -> None:
     print("AI-JEEP edge detector starting...")
 
@@ -223,6 +303,12 @@ def main() -> None:
     ALERTS_DIR = os.environ.get("ALERTS_DIR", "./alerts")
     if not os.path.isabs(ALERTS_DIR):
         ALERTS_DIR = os.path.join(os.path.dirname(__file__), ALERTS_DIR)
+
+    # Alert snapshot upload configuration
+    BACKEND_ALERT_UPLOAD_URL = os.environ.get(
+        "https://exciting-meadowlark-962.convex.cloud",
+        None  # Optional - set when Convex endpoint is ready
+    )
 
     GPS_DUMMY = "14.5995, 120.9842"
 
@@ -396,11 +482,19 @@ def main() -> None:
                     last_alert_sent_mono = now_mono
                     last_alert_pred = pred
 
-            # ---- Snapshot capture: cooldown on one anomaly == save one image ----
+            # ---- Snapshot capture with optional upload ----
             if pred in HAZARDOUS_PREDICTIONS:
                 if ret and frame is not None and (now_mono - last_snapshot_saved_mono >= SNAPSHOT_COOLDOWN_SEC):
                     timestamp = int(time.time())
-                    _save_alert_snapshot(frame, ALERTS_DIR, timestamp)
+                    _upload_alert_snapshot(
+                        frame,
+                        ALERTS_DIR,
+                        JEEPNEY_ID,
+                        ALERT_TYPE_MAP.get(pred, "UNKNOWN"),
+                        timestamp,
+                        upload_url=BACKEND_ALERT_UPLOAD_URL,
+                        timeout_sec=REQUEST_TIMEOUT_SEC,
+                    )
                     last_snapshot_saved_mono = now_mono
 
             # Small sleep to avoid maxing the CPU.

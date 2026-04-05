@@ -87,4 +87,69 @@ http.route({
   }),
 });
 
+http.route({
+  path: "/api/upload-alert",
+  method: "OPTIONS",
+  handler: preflightHandler,
+});
+
+http.route({
+  path: "/api/upload-alert",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      // Parse multipart form data
+      const formData = await request.formData();
+
+      const image = formData.get("image") as File;
+      const jeepneyId = formData.get("jeepneyId") as string;
+      const alertType = formData.get("alertType") as string;
+      const timestamp = parseInt(formData.get("timestamp") as string);
+      const filename = formData.get("filename") as string;
+
+      // Validate inputs
+      if (!image || !jeepneyId || !alertType || !timestamp) {
+        return jsonResponse(
+          { error: "Missing required fields: image, jeepneyId, alertType, timestamp" },
+          400
+        );
+      }
+
+      // Store image in Convex file storage
+      const imageBuffer = await image.arrayBuffer();
+      const storageId = await ctx.storage.store(
+        new Blob([imageBuffer], { type: "image/jpeg" })
+      );
+
+      // Generate mock confidence score (in production: from model output)
+      const confidenceScore = Math.random() * 0.3 + 0.7; // 70-100%
+
+      // Create alert record with image reference (in one atomic operation)
+      const alertId = await ctx.runMutation(api.alerts.insertAlertWithSnapshot, {
+        jeepneyId: jeepneyId as any,
+        alertType,
+        timestamp,
+        confidenceScore,
+        snapshotStorageId: storageId,
+        snapshotFilename: filename || `alert_${timestamp}.jpg`,
+      });
+
+      console.log(
+        `[HTTP] Alert snapshot stored: ${alertId} from ${jeepneyId} - ${alertType}`
+      );
+
+      return jsonResponse({
+        success: true,
+        alertId,
+        message: "Snapshot received and stored",
+      });
+    } catch (error) {
+      console.error("[HTTP] Upload error:", error);
+      const message =
+        error instanceof Error ? error.message : "Upload failed";
+      return jsonResponse({ error: message }, 500);
+    }
+  }),
+});
+
 export default http;

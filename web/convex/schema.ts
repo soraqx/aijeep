@@ -25,6 +25,9 @@ export default defineSchema({
     jeepneyId: v.id("jeepneys"),
     alertType: v.string(),
     timestamp: v.number(),
+    confidenceScore: v.optional(v.number()), // Model confidence 0.0-1.0
+    snapshotStorageId: v.optional(v.string()), // Convex file storage ID
+    snapshotFilename: v.optional(v.string()), // Original filename from edge
     isResolved: v.boolean()
   })
     .index("by_isResolved", ["isResolved"])
