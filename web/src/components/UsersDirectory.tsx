@@ -11,18 +11,18 @@ type UserRecord = {
 };
 
 function getRoleSelectClasses(role: string) {
-  if (role === "operator") {
+  if (role === "admin") {
     return "border-blue-300 focus:border-blue-400 focus:ring-blue-100";
   }
-  if (role === "driver") {
-    return "border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100";
+  if (role === "pending") {
+    return "border-amber-300 focus:border-amber-400 focus:ring-amber-100";
   }
   return "border-slate-300 focus:border-slate-400 focus:ring-slate-200";
 }
 
 export function UsersDirectory() {
   const users = useQuery(api.users.getAllUsers) as UserRecord[] | undefined;
-  const updateUserRole = useMutation(api.users.updateUserRole);
+  const updateRole = useMutation(api.users.updateUserRole);
   const [updatingUserId, setUpdatingUserId] = useState<Id<"users"> | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("");
 
@@ -30,12 +30,12 @@ export function UsersDirectory() {
     setUpdatingUserId(userId);
     setStatusMessage("");
     try {
-      await updateUserRole({ userId, newRole });
-      setStatusMessage("Privilege updated.");
-      window.setTimeout(() => setStatusMessage(""), 1800);
+      await updateRole({ userId, newRole });
+      setStatusMessage("Role updated successfully");
+      window.setTimeout(() => setStatusMessage(""), 2000);
     } catch (error) {
       console.error("Failed to update role:", error);
-      setStatusMessage("Update failed. Try again.");
+      setStatusMessage("Update failed. Please try again.");
     } finally {
       setUpdatingUserId(null);
     }
@@ -88,18 +88,18 @@ export function UsersDirectory() {
                   {user._id ? (
                     <select
                       className={`w-full max-w-[180px] rounded-md border bg-white px-2.5 py-1.5 text-xs text-slate-700 shadow-sm outline-none transition focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm ${getRoleSelectClasses(
-                        user.role ?? "guest"
+                        user.role ?? "pending"
                       )}`}
-                      value={user.role ?? "guest"}
+                      value={user.role ?? "pending"}
                       onChange={(e) => {
-                        if (!user._id) return; // This line satisfies TypeScript!
-                        updateUserRole({ userId: user._id, newRole: e.target.value });
+                        if (!user._id) return;
+                        handleRoleChange(user._id, e.target.value);
                       }}
                       disabled={updatingUserId === user._id}
                     >
-                      <option value="operator">Operator</option>
-                      <option value="driver">Driver</option>
+                      <option value="admin">Admin</option>
                       <option value="guest">Guest</option>
+                      <option value="pending">Pending Approval</option>
                     </select>
                   ) : (
                     <span className="text-xs text-slate-500">No user id</span>
@@ -119,5 +119,4 @@ export function UsersDirectory() {
       </div>
     </section>
   );
-  
 }

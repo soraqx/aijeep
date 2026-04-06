@@ -62,7 +62,7 @@ export const updateUserRole = mutation({
       throw new Error("Unauthorized: admin role required");
     }
 
-    if (!["admin", "pending"].includes(args.newRole)) {
+    if (!["admin", "guest", "pending"].includes(args.newRole)) {
       throw new Error("Invalid role");
     }
 
