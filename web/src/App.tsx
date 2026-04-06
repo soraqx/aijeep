@@ -10,6 +10,9 @@ const DashboardPage = lazy(() =>
 const UnauthorizedPage = lazy(() =>
   import("./pages/UnauthorizedPage").then((module) => ({ default: module.UnauthorizedPage }))
 );
+const UserManagementPage = lazy(() =>
+  import("./pages/UserManagementPage").then((module) => ({ default: module.UserManagementPage }))
+);
 
 type ProtectedRouteProps = {
   children: React.ReactNode;
@@ -73,7 +76,11 @@ function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  if (role !== "operator") {
+  if (role === "pending") {
+    return <Navigate to="/unauthorized" replace />;
+  }
+
+  if (role !== "admin") {
     return <Navigate to="/unauthorized" replace />;
   }
 
@@ -103,6 +110,14 @@ export default function App() {
             }
           />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
+          <Route
+            path="/users"
+            element={
+              <ProtectedRoute>
+                <UserManagementPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

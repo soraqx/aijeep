@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
+import { Webhook } from "svix";
 
 const http = httpRouter();
 
@@ -149,6 +150,77 @@ http.route({
         error instanceof Error ? error.message : "Upload failed";
       return jsonResponse({ error: message }, 500);
     }
+  }),
+});
+
+// Clerk webhook endpoint for syncing users
+http.route({
+  path: "/webhook/clerk",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    // Get the Svix headers for verification
+    const svixId = request.headers.get("svix-id");
+    const svixTimestamp = request.headers.get("svix-timestamp");
+    const svixSignature = request.headers.get("svix-signature");
+
+    // If no Svix headers, return 400
+    if (!svixId || !svixTimestamp || !svixSignature) {
+      return new Response("Missing Svix headers", { status: 400 });
+    }
+
+    // Get the webhook secret from environment variables
+    const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      console.error("CLERK_WEBHOOK_SECRET is not set");
+      return new Response("Internal server error", { status: 500 });
+    }
+
+    // Get the raw body for verification
+    const payload = await request.text();
+
+    // Create a Svix instance with the secret
+    const wh = new Webhook(webhookSecret);
+
+    let evt;
+    try {
+      // Verify the webhook signature
+      evt = wh.verify(payload, {
+        "svix-id": svixId,
+        "svix-timestamp": svixTimestamp,
+        "svix-signature": svixSignature,
+      });
+    } catch (err) {
+      console.error("Error verifying webhook signature:", err);
+      return new Response("Verification error", { status: 400 });
+    }
+
+    // Handle the user.created event
+    const webhookEvent = evt as { type: string; data: any };
+    if (webhookEvent.type === "user.created") {
+      const { id, email_addresses, first_name, last_name } = webhookEvent.data;
+
+      // Get the primary email address
+      const primaryEmail = email_addresses.find(
+        (email: any) => email.id === webhookEvent.data.primary_email_address_id
+      )?.email_address;
+
+      if (!primaryEmail) {
+        return new Response("No primary email found", { status: 400 });
+      }
+
+      // Call the mutation to create the user
+      await ctx.runMutation(internal.users.createUser, {
+        clerkId: id,
+        email: primaryEmail,
+        firstName: first_name ?? undefined,
+        lastName: last_name ?? undefined,
+      });
+
+      return new Response("User synced successfully", { status: 200 });
+    }
+
+    // For other event types, just return 200
+    return new Response("Event received", { status: 200 });
   }),
 });
 

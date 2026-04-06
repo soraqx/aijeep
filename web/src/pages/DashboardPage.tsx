@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
+import { useNavigate } from "react-router-dom";
 import {
   Activity,
   AlertTriangle,
@@ -159,6 +160,7 @@ function determineStatus(earValue: number, acceleration: number): string {
 export function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
+  const navigate = useNavigate();
 
   // Fetch live data from Convex
   const telemetryData = useQuery(api.telemetry.getLatest, { limit: 100 });
@@ -310,8 +312,7 @@ export function DashboardPage() {
             <NavItem
               label="Users"
               icon={<Users size={16} />}
-              active={activeTab === "users"}
-              onClick={() => onTabChange("users")}
+              onClick={() => navigate("/users")}
             />
           </nav>
         </aside>
@@ -566,17 +567,15 @@ export function DashboardPage() {
             </section>
           )}
 
-          {activeTab === "health" && (
-            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h2 className="text-base font-semibold text-slate-800">System Health</h2>
-              <p className="mt-2 text-sm text-slate-600">
-                System health panel placeholder. Use Dashboard Overview for operational status cards.
-              </p>
-            </section>
-          )}
-
-          {activeTab === "users" && <UsersDirectory />}
-        </main>
+{activeTab === "health" && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 className="text-base font-semibold text-slate-800">System Health</h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  System health panel placeholder. Use Dashboard Overview for operational status cards.
+                </p>
+              </section>
+            )}
+          </main>
       </div>
 
       <style>{`
