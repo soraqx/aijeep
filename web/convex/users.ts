@@ -72,13 +72,14 @@ export const updateUserRole = mutation({
   },
 });
 
-// Public mutation to create/update user from Clerk webhook
+// Internal mutation to create/update user from Clerk webhook
 export const createUser = internalMutation({
   args: {
     clerkId: v.string(),
     email: v.string(),
     firstName: v.optional(v.string()),
     lastName: v.optional(v.string()),
+    tokenIdentifier: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Check if user already exists by clerkId to prevent duplicates
@@ -89,6 +90,7 @@ export const createUser = internalMutation({
 
     if (existingUser) {
       // User already exists, return existing ID
+      console.log("[Users] User already exists:", existingUser._id);
       return existingUser._id;
     }
 
@@ -99,8 +101,10 @@ export const createUser = internalMutation({
       firstName: args.firstName,
       lastName: args.lastName,
       role: "pending",
+      tokenIdentifier: args.tokenIdentifier,
     });
 
+    console.log("[Users] Created new user:", userId);
     return userId;
   },
 });

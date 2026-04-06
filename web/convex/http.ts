@@ -158,68 +158,89 @@ http.route({
   path: "/webhook/clerk",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
+    console.log("[Clerk Webhook] Received");
+    console.log("📥 Webhook received. Payload length:", 0); // Will update below
+
     // Get the Svix headers for verification
     const svixId = request.headers.get("svix-id");
     const svixTimestamp = request.headers.get("svix-timestamp");
     const svixSignature = request.headers.get("svix-signature");
+    console.log("[Clerk Webhook] Headers:", { svixId, svixTimestamp, svixSignature: svixSignature?.slice(0, 20) + "..." });
 
     // If no Svix headers, return 400
     if (!svixId || !svixTimestamp || !svixSignature) {
+      console.error("[Clerk Webhook] Missing Svix headers");
       return new Response("Missing Svix headers", { status: 400 });
     }
 
     // Get the webhook secret from environment variables
     const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
     if (!webhookSecret) {
-      console.error("CLERK_WEBHOOK_SECRET is not set");
+      console.error("[Clerk Webhook] CLERK_WEBHOOK_SECRET is not set");
       return new Response("Internal server error", { status: 500 });
     }
 
-    // Get the raw body for verification
-    const payload = await request.text();
+    // Get the raw body for verification - MUST be raw string for Svix
+    const payloadString = await request.text();
+    console.log("📥 Webhook received. Payload length:", payloadString.length);
 
     // Create a Svix instance with the secret
     const wh = new Webhook(webhookSecret);
 
     let evt;
     try {
-      // Verify the webhook signature
-      evt = wh.verify(payload, {
+      // Verify the webhook signature using raw payload string
+      evt = wh.verify(payloadString, {
         "svix-id": svixId,
         "svix-timestamp": svixTimestamp,
         "svix-signature": svixSignature,
       });
+      console.log("[Clerk Webhook] Verification successful:", JSON.stringify(evt));
     } catch (err) {
-      console.error("Error verifying webhook signature:", err);
+      console.error("[Clerk Webhook] Verification failed:", err);
+      console.error("❌ Svix Verification Failed:", err);
       return new Response("Verification error", { status: 400 });
     }
 
+    console.log("✅ Webhook verified! Event Type:", (evt as any).type);
+
     // Handle the user.created event
     const webhookEvent = evt as { type: string; data: any };
+    console.log("[Clerk Webhook] Event type:", webhookEvent.type);
+
     if (webhookEvent.type === "user.created") {
       const { id, email_addresses, first_name, last_name } = webhookEvent.data;
+      console.log("[Clerk Webhook] User data:", { id, email_addresses, first_name, last_name });
 
       // Get the primary email address
-      const primaryEmail = email_addresses.find(
+      const primaryEmail = email_addresses?.find(
         (email: any) => email.id === webhookEvent.data.primary_email_address_id
       )?.email_address;
 
       if (!primaryEmail) {
+        console.error("[Clerk Webhook] No primary email found in:", email_addresses);
         return new Response("No primary email found", { status: 400 });
       }
 
-      // Call the mutation to create the user
+      console.log("[Clerk Webhook] Preparing to insert user:", { clerkId: id, email: primaryEmail, firstName: first_name, lastName: last_name });
+      console.log("💾 Attempting to insert user into Convex:", { clerkId: id, email: primaryEmail });
+
+      // Call the internal mutation to create the user
       await ctx.runMutation(internal.users.createUser, {
         clerkId: id,
         email: primaryEmail,
         firstName: first_name ?? undefined,
         lastName: last_name ?? undefined,
+        tokenIdentifier: id, // Clerk user ID maps to tokenIdentifier
       });
 
+      console.log("[Clerk Webhook] User synced successfully");
+      console.log("🎉 User successfully inserted!");
       return new Response("User synced successfully", { status: 200 });
     }
 
     // For other event types, just return 200
+    console.log("[Clerk Webhook] Event received but not user.created:", webhookEvent.type);
     return new Response("Event received", { status: 200 });
   }),
 });

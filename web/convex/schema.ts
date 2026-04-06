@@ -39,10 +39,12 @@ export default defineSchema({
   users: defineTable({
     clerkId: v.string(),
     email: v.string(),
-    role: v.union(v.literal("admin"), v.literal("operator"), v.literal("pending")),
+    role: v.string(),
     firstName: v.optional(v.string()),
-    lastName: v.optional(v.string())
+    lastName: v.optional(v.string()),
+    tokenIdentifier: v.optional(v.string())
   })
     .index("by_clerkId", ["clerkId"])
     .index("by_email", ["email"])
+    .index("by_tokenIdentifier", ["tokenIdentifier"])
 });
