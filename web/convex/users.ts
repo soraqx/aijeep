@@ -8,17 +8,15 @@ async function getUserByClerkId(ctx: any, clerkId: string) {
     .unique();
 }
 
-async function getCurrentUserByToken(ctx: any) {
+async function getCurrentUserFromIdentity(ctx: any) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) return null;
 
-  const tokenIdentifier = identity.tokenIdentifier;
-  if (!tokenIdentifier) return null;
-
+  // identity.subject perfectly matches the clerkId we save in the webhook
   return await ctx.db
     .query("users")
-    .withIndex("by_tokenIdentifier", (q: any) =>
-      q.eq("tokenIdentifier", tokenIdentifier)
+    .withIndex("by_clerkId", (q: any) =>
+      q.eq("clerkId", identity.subject)
     )
     .unique();
 }
@@ -26,14 +24,14 @@ async function getCurrentUserByToken(ctx: any) {
 export const getCurrentUser = query({
   args: {},
   handler: async (ctx) => {
-    return await getCurrentUserByToken(ctx);
+    return await getCurrentUserFromIdentity(ctx);
   },
 });
 
 export const getCurrentUserRole = query({
   args: {},
   handler: async (ctx) => {
-    const user = await getCurrentUserByToken(ctx);
+    const user = await getCurrentUserFromIdentity(ctx);
     return user?.role ?? "pending";
   },
 });
@@ -41,7 +39,7 @@ export const getCurrentUserRole = query({
 export const getAllUsers = query({
   args: {},
   handler: async (ctx) => {
-    const currentUser = await getCurrentUserByToken(ctx);
+    const currentUser = await getCurrentUserFromIdentity(ctx);
     if (!currentUser || currentUser.role !== "admin") {
       throw new Error("Unauthorized: admin role required");
     }
@@ -56,7 +54,7 @@ export const updateUserRole = mutation({
     newRole: v.string(),
   },
   handler: async (ctx, args) => {
-    const currentUser = await getCurrentUserByToken(ctx);
+    const currentUser = await getCurrentUserFromIdentity(ctx);
     if (!currentUser) {
       throw new Error("Unauthorized: authentication required");
     }
