@@ -1,86 +1,68 @@
-"""
-Generate a synthetic edge-sensor dataset for AI-JEEP.
-
-Creates 3,000 rows total:
-- Label 0 (Normal): 1,000 rows
-- Label 1 (Drowsy): 1,000 rows
-- Label 2 (Distracted/Harsh Braking): 1,000 rows
-"""
-
-import random
-
-import numpy as np
 import pandas as pd
+import numpy as np
+import time
 
+# --- SIMULATION PARAMETERS ---
+FPS = 15
+MINUTES = 5
+TOTAL_FRAMES = FPS * 60 * MINUTES
+START_TIME = time.time()
 
-def generate_normal(n_rows: int) -> pd.DataFrame:
-    """Generate normal-driving samples (label 0)."""
-    return pd.DataFrame(
-        {
-            "earValue": np.random.uniform(0.25, 0.35, n_rows),
-            "accelX": np.random.normal(0.0, 0.1, n_rows),
-            "accelY": np.random.normal(0.0, 0.1, n_rows),
-            "accelZ": np.random.normal(0.0, 0.1, n_rows),
-            "label": 0,
-        }
-    )
+# 1. Initialize the Base DataFrame
+timestamps = [START_TIME + (i * (1/FPS)) for i in range(TOTAL_FRAMES)]
+df = pd.DataFrame({'timestamp': timestamps})
 
+# 2. Simulate Baseline (Normal Driving)
+# Normal EAR: ~0.30 with slight flutter
+df['earValue'] = np.random.normal(loc=0.32, scale=0.02, size=TOTAL_FRAMES)
+# Normal Blinks (Drop to <0.1 for 3-4 frames randomly)
+blink_indices = np.random.choice(df.index, size=int(TOTAL_FRAMES * 0.05), replace=False)
+for idx in blink_indices:
+    if idx + 3 < TOTAL_FRAMES:
+        df.loc[idx:idx+3, 'earValue'] = np.random.normal(0.05, 0.01, size=4)
 
-def generate_drowsy(n_rows: int) -> pd.DataFrame:
-    """Generate drowsy-driving samples (label 1)."""
-    return pd.DataFrame(
-        {
-            "earValue": np.random.uniform(0.15, 0.22, n_rows),
-            "accelX": np.random.normal(0.0, 0.1, n_rows),
-            "accelY": np.random.normal(0.0, 0.1, n_rows),
-            "accelZ": np.random.normal(0.0, 0.1, n_rows),
-            "label": 1,
-        }
-    )
+# Kinematics: 1g on Z-axis (gravity + jeepney vibration), ~0g on X and Y
+df['accel_x'] = np.random.normal(loc=0.0, scale=0.05, size=TOTAL_FRAMES) # Minor lane swaying
+df['accel_y'] = np.random.normal(loc=0.0, scale=0.08, size=TOTAL_FRAMES) # Minor pedal adjustments
+df['accel_z'] = np.random.normal(loc=0.98, scale=0.15, size=TOTAL_FRAMES) # High variance jeepney rattle
 
+# GPS: Constant speed, perfect lock, stationary coords for simplicity
+df['speed_kmh'] = np.random.normal(loc=45.0, scale=2.0, size=TOTAL_FRAMES)
+df['sats'] = 8
+df['lat'] = 14.7937
+df['lon'] = 120.8791
+df['Label'] = 0
 
-def generate_harsh_events(n_rows: int) -> pd.DataFrame:
-    """Generate distracted/harsh-braking samples (label 2)."""
-    # Base vibration similar to normal driving.
-    accel_x = np.random.normal(0.0, 0.15, n_rows)
-    accel_z = np.random.normal(0.0, 0.15, n_rows)
+# --- INJECTING EVENTS (ANOMALIES) ---
 
-    # Force accelY spikes in either positive or negative direction.
-    accel_y = []
-    for _ in range(n_rows):
-        sign = random.choice([-1, 1])
-        magnitude = random.uniform(1.5, 3.0)
-        accel_y.append(sign * magnitude)
+# EVENT 1: Drowsy Episodes (Class 1) - Extended eye closure
+# Let's inject 4 drowsy events, each lasting 2 seconds (30 frames)
+drowsy_starts = [1000, 2500, 3200, 4100]
+for start in drowsy_starts:
+    end = start + (2 * FPS)
+    # EAR drops significantly and stays low
+    df.loc[start:end, 'earValue'] = np.random.normal(loc=0.08, scale=0.03, size=(end-start)+1)
+    # Label as Drowsy
+    df.loc[start:end, 'Label'] = 1
 
-    return pd.DataFrame(
-        {
-            "earValue": np.random.uniform(0.25, 0.35, n_rows),
-            "accelX": accel_x,
-            "accelY": np.array(accel_y),
-            "accelZ": accel_z,
-            "label": 2,
-        }
-    )
+# EVENT 2: Harsh Braking (Class 2) - Sudden negative Y acceleration
+# Let's inject 3 braking events, each lasting 1.5 seconds
+brake_starts = [500, 1800, 3800]
+for start in brake_starts:
+    end = start + int(1.5 * FPS)
+    # Massive spike in negative longitudinal acceleration
+    df.loc[start:end, 'accel_y'] = np.random.normal(loc=-0.85, scale=0.1, size=(end-start)+1)
+    # Speed drops rapidly
+    df.loc[start:end, 'speed_kmh'] = np.linspace(45.0, 10.0, num=(end-start)+1)
+    # Label as Distracted/Harsh Brake
+    df.loc[start:end, 'Label'] = 2
 
+# --- FINAL CLEANUP & EXPORT ---
+# Ensure values don't break physics (e.g., EAR shouldn't be negative)
+df['earValue'] = df['earValue'].clip(lower=0.0)
 
-def main() -> None:
-    rows_per_label = 1000
-
-    normal_df = generate_normal(rows_per_label)
-    drowsy_df = generate_drowsy(rows_per_label)
-    harsh_df = generate_harsh_events(rows_per_label)
-
-    # Combine and shuffle so labels are mixed.
-    dataset_df = pd.concat([normal_df, drowsy_df, harsh_df], ignore_index=True)
-    dataset_df = dataset_df.sample(frac=1.0, random_state=42).reset_index(drop=True)
-
-    output_path = "edge/dataset.csv"
-    dataset_df.to_csv(output_path, index=False)
-
-    print(f"Created synthetic dataset at: {output_path}")
-    print("Label distribution:")
-    print(dataset_df["label"].value_counts().sort_index())
-
-
-if __name__ == "__main__":
-    main()
+# Save to CSV
+filename = 'raw_dataset.csv'
+df.to_csv(filename, index=False)
+print(f"Successfully generated {filename} with {TOTAL_FRAMES} frames.")
+print(f"Class Distribution:\n{df['Label'].value_counts()}")
