@@ -3,7 +3,7 @@ import os
 
 def get_model_path():
     repo_id = "soraqx/rfmodel"
-    filename = "rf_model.pkl"
+    filename = "ai_jeep_rf_model.pkl"
 
     print(f"checking if model {filename} exists locally...")
 
