@@ -37,26 +37,27 @@ WINDOW_1_SEC = 1 * FPS
 WINDOW_3_SEC = 3 * FPS
 
 
-def _parse_sensor_line(line: str) -> Optional[Tuple[float, float, float, float]]:
+def _parse_sensor_line(line: str) -> Optional[Tuple[float, float, float, float, str]]:
     """
-    Expected format from ESP32:
-      AccelX,AccelY,AccelZ,Speed
-    Returns: (accelX, accelY, accelZ, speed_kmh)
+    Parses JSON payload from ESP32.
+    Returns: (accelX, accelY, accelZ, speed_kmh, gps_string)
     """
     if not line:
         return None
-    parts = [p.strip() for p in line.split(",")]
-    if len(parts) < 4:
-        return None
     try:
-        ax = float(parts[0])
-        ay = float(parts[1])
-        az = float(parts[2])
-        speed = float(parts[3])
-        if not (math.isfinite(ax) and math.isfinite(ay) and math.isfinite(az) and math.isfinite(speed)):
-            return None
-        return ax, ay, az, speed
-    except ValueError:
+        data = json.loads(line)
+        ax = float(data.get("accel_x", 0.0))
+        ay = float(data.get("accel_y", 0.0))
+        az = float(data.get("accel_z", 0.0))
+        speed = float(data.get("speed_kmh", 0.0))
+        
+        # Format the GPS coordinates for the backend
+        lat = data.get("lat", 0.0)
+        lon = data.get("lon", 0.0)
+        gps_string = f"{lat}, {lon}"
+        
+        return ax, ay, az, speed, gps_string
+    except (json.JSONDecodeError, ValueError, TypeError):
         return None
 
 
@@ -297,6 +298,7 @@ def main() -> None:
     latest_accelY: float = 0.0
     latest_accelZ: float = 0.0
     latest_speed: float = 45.0
+    current_gps: str = GPS_DUMMY
 
     ear_baseline: float = 0.32
     baseline_collected: bool = False
@@ -324,7 +326,7 @@ def main() -> None:
                     raw_line = ser.readline().decode("utf-8", errors="ignore").strip()
                     parsed = _parse_sensor_line(raw_line)
                     if parsed is not None:
-                        latest_accelX, latest_accelY, latest_accelZ, latest_speed = parsed
+                        latest_accelX, latest_accelY, latest_accelZ, latest_speed, current_gps = parsed
                 except serial.SerialException as e:
                     print(f"[Serial] Read error: {e.__class__.__name__}: {e}")
                     try:
@@ -400,7 +402,7 @@ def main() -> None:
                 timestamp = int(time.time())
                 telemetry_payload = {
                     "jeepneyId": JEEPNEY_ID,
-                    "gps": GPS_DUMMY,
+                    "gps": current_gps,
                     "earValue": fused[0],
                     "accelX": latest_accelX,
                     "accelY": latest_accelY,
