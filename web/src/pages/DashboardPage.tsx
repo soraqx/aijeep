@@ -29,6 +29,7 @@ import { LiveMapView } from "../components/LiveMapView";
 import { EmergencyBadge } from "../components/EmergencyBadge";
 import { AlertsGallery } from "../components/AlertsGallery";
 import { AlertStatsHeader } from "../components/AlertStatsHeader";
+import { haversineDistance, calculateSpeed, parseGPS } from "../utils/telemetryUtils";
 
 // Types matching Convex schema
 type Jeepney = {
@@ -134,14 +135,6 @@ function LoadingSpinner() {
 }
 
 /**
- * Parses GPS string "lat,lng" into a LatLngTuple.
- */
-function parseGPS(gpsString: string): LatLngTuple {
-  const [lat, lng] = gpsString.split(",").map((v) => parseFloat(v));
-  return [lat || 14.5995, lng || 120.9842]; // Fallback to Metro Manila center
-}
-
-/**
  * Calculates total acceleration magnitude from X, Y, Z components.
  */
 function calculateAcceleration(accelX: number, accelY: number, accelZ: number): number {
@@ -183,31 +176,28 @@ export function DashboardPage() {
     shadowSize: [41, 41],
   });
 
-  // Process telemetry data for table display
-  const telemetryRows = (telemetryData || []).slice(0, 10).map((telemetry: Telemetry) => {
-    const accel = calculateAcceleration(telemetry.accelX, telemetry.accelY, telemetry.accelZ);
-    const jeepney = jeepneyData?.find((j: Jeepney) => j._id === telemetry.jeepneyId);
-    return {
-      time: new Date(telemetry.timestamp).toLocaleTimeString(),
-      jeepney: jeepney?.plateNumber || "Unknown",
-      ear: telemetry.earValue.toFixed(2),
-      accel: accel.toFixed(1) + " m/s²",
-      status: determineStatus(telemetry.earValue, accel),
-    };
-  });
+// Process telemetry data for table display - now with speed calculation
+const telemetryRows = (telemetryData || []).slice(0, 10).map((telemetry: Telemetry, index: number) => {
+  // Calculate speed using current and previous telemetry point
+  const previousTelemetry = index > 0 ? (telemetryData || [])[index - 1] : null;
+  const speedKmh = previousTelemetry 
+    ? calculateSpeed(
+        { gps: telemetry.gps, timestamp: telemetry.timestamp },
+        { gps: previousTelemetry.gps, timestamp: previousTelemetry.timestamp }
+      )
+    : 0;
+    
+  const jeepney = jeepneyData?.find((j: Jeepney) => j._id === telemetry.jeepneyId);
+  return {
+    time: new Date(telemetry.timestamp).toLocaleTimeString(),
+    jeepney: jeepney?.plateNumber || "Unknown",
+    ear: telemetry.earValue.toFixed(2),
+    speed: speedKmh.toFixed(1) + " km/h",
+    status: determineStatus(telemetry.earValue, calculateAcceleration(telemetry.accelX, telemetry.accelY, telemetry.accelZ)),
+  };
+});
 
-  // Process jeepney data with GPS positions
-  const jeepneyPositions = (telemetryData || [])
-    .reduce(
-      (acc: Map<string, Telemetry>, telemetry: Telemetry) => {
-        if (!acc.has(telemetry.jeepneyId)) {
-          acc.set(telemetry.jeepneyId, telemetry);
-        }
-        return acc;
-      },
-      new Map()
-    )
-    .values();
+
 
   // Count metrics
   const activeJeepneyCount = jeepneyData?.length || 0;
@@ -362,13 +352,25 @@ export function DashboardPage() {
                   tone={activeJeepneyCount > 0 ? "success" : "default"}
                   loading={jeepneyData === undefined}
                 />
-                <MetricCard
-                  title="Data Points"
-                  value={(telemetryData?.length || 0).toString()}
-                  subtitle="Telemetry records in stream"
-                  icon={<Activity size={18} />}
-                  loading={telemetryData === undefined}
-                />
+<MetricCard
+                   title="Current Speed"
+                   value={telemetryData && telemetryData.length > 0 
+                     ? ((() => {
+                         const latest = telemetryData[telemetryData.length - 1];
+                         const previous = telemetryData.length > 1 ? telemetryData[telemetryData.length - 2] : null;
+                         if (!latest || !previous) return "0";
+                         const speed = calculateSpeed(
+                           { gps: latest.gps, timestamp: latest.timestamp },
+                           { gps: previous.gps, timestamp: previous.timestamp }
+                         );
+                         return speed.toFixed(1);
+                       })())
+                     : "0"
+                   }
+                   subtitle="Speed of latest telemetry reading"
+                   icon={<Activity size={18} />}
+                   loading={telemetryData === undefined}
+                 />
               </section>
 
               <section className="mt-5 grid grid-cols-1 gap-4 sm:mt-6 sm:gap-5 lg:grid-cols-12">
@@ -384,44 +386,44 @@ export function DashboardPage() {
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-200">
-                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Time</th>
-                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Jeepney</th>
-                            <th className="px-3 py-2 text-left font-semibold text-slate-600">EAR</th>
-                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Acceleration</th>
-                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Status</th>
-                          </tr>
-                        </thead>
+<thead>
+                           <tr className="border-b border-slate-200">
+                             <th className="px-3 py-2 text-left font-semibold text-slate-600">Time</th>
+                             <th className="px-3 py-2 text-left font-semibold text-slate-600">Jeepney</th>
+                             <th className="px-3 py-2 text-left font-semibold text-slate-600">EAR</th>
+                             <th className="px-3 py-2 text-left font-semibold text-slate-600">Speed</th>
+                             <th className="px-3 py-2 text-left font-semibold text-slate-600">Status</th>
+                           </tr>
+                         </thead>
                         <tbody>
-                          {telemetryRows.length > 0 ? (
-                            telemetryRows.map((row, idx) => (
-                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
-                                <td className="px-3 py-2.5 font-mono text-slate-600">{row.time}</td>
-                                <td className="px-3 py-2.5 font-semibold text-slate-900">{row.jeepney}</td>
-                                <td className="px-3 py-2.5 text-slate-600">{row.ear}</td>
-                                <td className="px-3 py-2.5 text-slate-600">{row.accel}</td>
-                                <td className="px-3 py-2.5">
-                                  <span
-                                    className={`rounded-full px-2.5 py-1 text-xs font-medium ${row.status === "Normal"
-                                      ? "bg-emerald-100 text-emerald-700"
-                                      : row.status === "Monitoring"
-                                        ? "bg-blue-100 text-blue-700"
-                                        : "bg-amber-100 text-amber-700"
-                                      }`}
-                                  >
-                                    {row.status}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
-                                No telemetry data available yet
-                              </td>
-                            </tr>
-                          )}
+{telemetryRows.length > 0 ? (
+                             telemetryRows.map((row, idx) => (
+                               <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
+                                 <td className="px-3 py-2.5 font-mono text-slate-600">{row.time}</td>
+                                 <td className="px-3 py-2.5 font-semibold text-slate-900">{row.jeepney}</td>
+                                 <td className="px-3 py-2.5 text-slate-600">{row.ear}</td>
+                                 <td className="px-3 py-2.5 text-slate-600">{row.speed}</td>
+                                 <td className="px-3 py-2.5">
+                                   <span
+                                     className={`rounded-full px-2.5 py-1 text-xs font-medium ${row.status === "Normal"
+                                       ? "bg-emerald-100 text-emerald-700"
+                                       : row.status === "Monitoring"
+                                         ? "bg-blue-100 text-blue-700"
+                                         : "bg-amber-100 text-amber-700"
+                                       }`}
+                                   >
+                                     {row.status}
+                                   </span>
+                                 </td>
+                               </tr>
+                             ))
+                           ) : (
+                             <tr>
+                               <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                                 No telemetry data available yet
+                               </td>
+                             </tr>
+                           )}
                         </tbody>
                       </table>
                     </div>
@@ -474,14 +476,15 @@ export function DashboardPage() {
                 <LoadingSpinner />
               ) : (
                 <div className="relative z-0 h-[420px] w-full overflow-hidden rounded-xl border border-slate-300 bg-slate-100 sm:h-[500px]">
-                  <LiveMapView
-                    telemetryData={telemetryData}
-                    jeepneyData={jeepneyData}
-                    calculateAcceleration={calculateAcceleration}
-                    determineStatus={determineStatus}
-                    parseGPS={parseGPS}
-                    jeepneyIcon={jeepneyIcon}
-                  />
+<LiveMapView
+  telemetryData={telemetryData}
+  jeepneyData={jeepneyData}
+  calculateAcceleration={calculateAcceleration}
+  determineStatus={determineStatus}
+  parseGPS={parseGPS}
+  calculateSpeed={calculateSpeed}
+  jeepneyIcon={jeepneyIcon}
+/>
                 </div>
               )}
             </section>
