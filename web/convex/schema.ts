@@ -8,15 +8,16 @@ export default defineSchema({
     status: v.string()
   }).index("by_plateNumber", ["plateNumber"]),
 
-  telemetry: defineTable({
-    jeepneyId: v.id("jeepneys"),
-    gps: v.string(),
-    earValue: v.number(),
-    accelX: v.number(),
-    accelY: v.number(),
-    accelZ: v.number(),
-    timestamp: v.number()
-  })
+    telemetry: defineTable({
+      jeepneyId: v.id("jeepneys"),
+      gps: v.string(),
+      earValue: v.number(),
+      accelX: v.number(),
+      accelY: v.number(),
+      accelZ: v.number(),
+      speedKmh: v.optional(v.number()),
+      timestamp: v.number()
+    })
     .index("by_timestamp", ["timestamp"])
     .index("by_jeepneyId", ["jeepneyId"])
     .index("by_jeepney_timestamp", ["jeepneyId", "timestamp"]),

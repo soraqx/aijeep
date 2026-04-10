@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Optional, Tuple, List
 from collections import deque
 from datetime import datetime
+import pandas as pd  # For ML feature names to eliminate warning
 
 import cv2
 import joblib
@@ -138,10 +139,12 @@ def _safe_post(
     try:
         if requests is not None and session is not None:
             resp = session.post(url, json=payload, timeout=timeout_sec)
+            print(f"[HTTP] POST to {url}: Status {resp.status_code}")
             if resp.status_code >= 400:
-                print(f"[HTTP] POST failed {resp.status_code}: {resp.text[:300]}")
+                print(f"[HTTP] POST failed {resp.status_code}: {resp.text}")
             return
 
+        # Fallback implementation (urllib) when `requests` isn't installed.
         data = json.dumps(payload).encode("utf-8")
         headers = {"Content-Type": "application/json"}
         req = urllib.request.Request(url=url, data=data, headers=headers, method="POST")
@@ -149,15 +152,16 @@ def _safe_post(
             with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
                 status = getattr(resp, "status", 200)
                 body = resp.read().decode("utf-8", errors="ignore")
+                print(f"[HTTP] POST to {url}: Status {status}")
                 if status >= 400:
-                    print(f"[HTTP] POST failed {status}: {body[:300]}")
+                    print(f"[HTTP] POST failed {status}: {body}")
         except urllib.error.HTTPError as e:
             body = ""
             try:
                 body = e.read().decode("utf-8", errors="ignore")
             except Exception:
                 pass
-            print(f"[HTTP] POST failed {e.code}: {body[:300]}")
+            print(f"[HTTP] POST failed {e.code}: {body}")
     except Exception as e:
         print(f"[HTTP] POST error: {e.__class__.__name__}: {e}")
 
@@ -391,7 +395,11 @@ def main() -> None:
             ]
 
             try:
-                pred = int(model.predict([fused])[0])
+                # Create DataFrame with correct feature names to eliminate warning
+                feature_names = ['N_EAR', 'N_EAR_rolling_min', 'N_EAR_rolling_var', 
+                                'Accel_rolling_max', 'Accel_rolling_std', 'speed_kmh']
+                fused_df = pd.DataFrame([fused], columns=feature_names)
+                pred = int(model.predict(fused_df)[0])
             except Exception as e:
                 print(f"[ML] Inference error: {e.__class__.__name__}: {e}")
                 pred = 0

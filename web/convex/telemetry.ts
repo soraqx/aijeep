@@ -9,6 +9,7 @@ export const insert = mutation({
     accelX: v.number(),
     accelY: v.number(),
     accelZ: v.number(),
+    speedKmh: v.optional(v.number()),
     timestamp: v.number(),
   },
   handler: async (ctx, args) => {
