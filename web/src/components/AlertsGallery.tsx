@@ -1,229 +1,125 @@
-import React, { useState, useEffect } from "react";
-import { Clock, AlertTriangle, Zap, X, CheckCircle2, Loader } from "lucide-react";
+import { useState } from "react";
 import { useMutation } from "convex/react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { api } from "../../convex/_generated/api";
-import { Id } from "../../convex/_generated/dataModel";
-import { AlertDetailsModal } from "./AlertDetailsModal";
 
-interface AlertSnapshot {
-    id: string;
-    _id?: Id<"alerts">;
-    jeepneyId: string;
-    alertType: "DROWSY" | "HARSH_BRAKING" | "UNKNOWN";
-    timestamp: number;
-    confidenceScore: number;
-    snapshotUrl?: string;
-    snapshotFilename?: string;
-    isResolved?: boolean;
-    jeepneyInfo?: {
-        plateNumber: string;
-        driverName: string;
-        status: string;
-    } | null;
-}
-
-interface AlertsGalleryProps {
-    alerts: AlertSnapshot[];
-    isLoading?: boolean;
-    onDismiss?: (alertId: string) => void;
-}
-
-/**
- * AlertsGallery displays a grid of recent alert snapshots with timestamps and confidence scores.
- * Each card shows the captured image, alert type, time, and ML model confidence.
- * Includes dismiss button and click-to-details modal functionality.
- */
-export const AlertsGallery: React.FC<AlertsGalleryProps> = ({
-    alerts = [],
-    isLoading = false,
-    onDismiss,
-}) => {
-    const resolveAlertMutation = useMutation(api.alerts.resolveAlert);
-
-    const getAlertIcon = (alertType: AlertSnapshot["alertType"]) => {
-        switch (alertType) {
-            case "DROWSY":
-                return <AlertTriangle size={18} className="text-amber-600" />;
-            case "HARSH_BRAKING":
-                return <Zap size={18} className="text-red-600" />;
-            default:
-                return <AlertTriangle size={18} className="text-slate-600" />;
-        }
-    };
-
-    const getAlertColor = (alertType: AlertSnapshot["alertType"]) => {
-        switch (alertType) {
-            case "DROWSY":
-                return "border-amber-200 bg-amber-50";
-            case "HARSH_BRAKING":
-                return "border-red-200 bg-red-50";
-            default:
-                return "border-slate-200 bg-slate-50";
-        }
-    };
-
-    const formatTime = (timestamp: number) => {
-        const date = new Date(timestamp * 1000);
-        return date.toLocaleTimeString("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-        });
-    };
-
-    const formatDate = (timestamp: number) => {
-        const date = new Date(timestamp * 1000);
-        return date.toLocaleDateString("en-US");
-    };
-
-    // Individual alert card component
-    const AlertCard: React.FC<{ alert: AlertSnapshot }> = ({ alert }) => {
-        const [detailsOpen, setDetailsOpen] = useState(false);
-        const [isDismissing, setIsDismissing] = useState(false);
-
-        const handleDismiss = async (e: React.MouseEvent) => {
-            e.stopPropagation();
-            if (!alert._id) return;
-
-            try {
-                setIsDismissing(true);
-                await resolveAlertMutation({ alertId: alert._id });
-                onDismiss?.(alert.id);
-            } catch (error) {
-                console.error("Failed to dismiss alert:", error);
-            } finally {
-                setIsDismissing(false);
-            }
-        };
-
-        return (
-            <>
-                <div
-                    className={`group relative overflow-hidden rounded-xl border p-3 shadow-sm transition hover:shadow-md cursor-pointer ${getAlertColor(alert.alertType)}`}
-                    onClick={() => setDetailsOpen(true)}
-                >
-                    {/* Placeholder or actual snapshot image */}
-                    <div className="aspect-video w-full overflow-hidden rounded-lg bg-gradient-to-br from-slate-300 to-slate-400 mb-3">
-                        {alert.snapshotUrl ? (
-                            <img
-                                src={alert.snapshotUrl}
-                                alt={`Alert snapshot ${alert.id}`}
-                                className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-200"
-                            />
-                        ) : (
-                            <div className="h-full w-full flex items-center justify-center text-slate-600">
-                                <span className="text-sm font-medium">
-                                    {alert.snapshotFilename || "No image"}
-                                </span>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                {getAlertIcon(alert.alertType)}
-                                <span className="text-xs font-bold uppercase text-slate-700">
-                                    {alert.alertType.replace(/_/g, " ")}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-1 text-xs text-slate-600">
-                            <Clock size={12} />
-                            <span>{formatTime(alert.timestamp)}</span>
-                        </div>
-
-                        <div className="pt-2 border-t border-slate-200">
-                            <div className="flex items-center justify-between mb-1">
-                                <span className="text-xs font-semibold text-slate-600">
-                                    Confidence
-                                </span>
-                                <span className="text-xs font-bold text-slate-900">
-                                    {(alert.confidenceScore * 100).toFixed(1)}%
-                                </span>
-                            </div>
-                            <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-gradient-to-r from-amber-500 to-red-600"
-                                    style={{ width: `${Math.min(alert.confidenceScore * 100, 100)}%` }}
-                                />
-                            </div>
-                        </div>
-
-                        {/* Dismiss Button */}
-                        <button
-                            onClick={handleDismiss}
-                            disabled={isDismissing || alert.isResolved}
-                            className="mt-3 w-full flex items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                        >
-                            {isDismissing ? (
-                                <>
-                                    <Loader size={14} className="animate-spin" />
-                                    <span>Dismissing...</span>
-                                </>
-                            ) : alert.isResolved ? (
-                                <>
-                                    <CheckCircle2 size={14} />
-                                    <span>Dismissed</span>
-                                </>
-                            ) : (
-                                <>
-                                    <CheckCircle2 size={14} />
-                                    <span>Dismiss</span>
-                                </>
-                            )}
-                        </button>
-                    </div>
-                </div>
-
-                {/* Details Modal */}
-                <AlertDetailsModal
-                    alert={alert._id ? {
-                        _id: alert._id,
-                        jeepneyId: alert.jeepneyId as Id<"jeepneys">,
-                        alertType: alert.alertType,
-                        timestamp: alert.timestamp,
-                        confidenceScore: alert.confidenceScore,
-                        snapshotFilename: alert.snapshotFilename,
-                        imageUrl: alert.snapshotUrl,
-                        isResolved: alert.isResolved || false,
-                        jeepneyInfo: alert.jeepneyInfo,
-                    } : null}
-                    isOpen={detailsOpen}
-                    onClose={() => setDetailsOpen(false)}
-                />
-            </>
-        );
-    };
-
-    if (isLoading) {
-        return (
-            <div className="flex min-h-[400px] items-center justify-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            </div>
-        );
-    }
-
-    if (alerts.length === 0) {
-        return (
-            <div className="flex min-h-[400px] items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
-                <div className="text-center">
-                    <AlertTriangle size={32} className="mx-auto mb-3 text-slate-400" />
-                    <p className="text-sm font-medium text-slate-600">No active alerts</p>
-                    <p className="text-xs text-slate-500">
-                        System is operating normally
-                    </p>
-                </div>
-            </div>
-        );
-    }
-
-    return (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {alerts.map((alert) => (
-                <AlertCard key={alert.id} alert={alert} />
-            ))}
-        </div>
-    );
+type Alert = {
+  _id: string;
+  snapshotUrl?: string | null;
+  alertType: string;
+  timestamp: number;
+  isResolved: boolean;
+  jeepneyInfo?: {
+    plateNumber: string;
+    driverName: string;
+    status: string;
+  } | null;
 };
+
+type AlertsGalleryProps = {
+  alerts: Alert[];
+  isLoading?: boolean;
+  onAlertResolved?: () => void;
+};
+
+export function AlertsGallery({ alerts, isLoading = false, onAlertResolved }: AlertsGalleryProps) {
+  const resolveAlert = useMutation(api.alerts.resolveAlert);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+
+  const handleResolve = async (alertId: string) => {
+    setResolvingId(alertId);
+    try {
+      await resolveAlert({ alertId: alertId as any });
+      if (onAlertResolved) {
+        onAlertResolved();
+      }
+    } catch (error) {
+      console.error("Failed to resolve alert:", error);
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 border-2 border-amber-200 rounded-full border-t-transparent border-l-transparent border-b-amber-500 border-r-amber-500 animate-spin"></div>
+          <span className="text-sm text-slate-500">Loading gallery...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (alerts.length === 0) {
+    return (
+      <p className="text-center text-sm text-slate-500 py-8">
+        No snapshots available for this vehicle
+      </p>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {alerts.map((alert) => (
+        <div key={alert._id} className="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm">
+          {alert.snapshotUrl ? (
+            <div className="aspect-video w-full overflow-hidden bg-slate-100">
+              <img 
+                src={alert.snapshotUrl} 
+                alt="incident snapshot" 
+                className="h-full w-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="flex aspect-video w-full items-center justify-center bg-slate-100">
+              <p className="text-xs text-slate-400">No snapshot available</p>
+            </div>
+          )}
+          <div className="p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                alert.alertType === "DROWSY" 
+                  ? "bg-red-100 text-red-700" 
+                  : alert.alertType === "HARSH_BRAKING"
+                  ? "bg-orange-100 text-orange-700"
+                  : "bg-slate-100 text-slate-700"
+              }`}>
+                {alert.alertType === "DROWSY" ? "DROWSY" : alert.alertType === "HARSH_BRAKING" ? "HARSH BRAKING" : alert.alertType}
+              </span>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                alert.isResolved 
+                  ? "bg-emerald-100 text-emerald-700" 
+                  : "bg-amber-100 text-amber-700"
+              }`}>
+                {alert.isResolved ? "Resolved" : "Active"}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500">{new Date(alert.timestamp).toLocaleString()}</p>
+            <div className="mt-3 pt-3 border-t border-slate-100">
+              {alert.isResolved ? (
+                <div className="flex items-center justify-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-slate-400 text-sm font-medium">
+                  <CheckCircle2 size={16} />
+                  Resolved
+                </div>
+              ) : resolvingId === alert._id ? (
+                <div className="flex items-center justify-center gap-2 rounded-lg bg-amber-100 px-3 py-2 text-amber-700 text-sm font-medium">
+                  <Loader2 size={16} className="animate-spin" />
+                  Resolving...
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleResolve(alert._id)}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-white text-sm font-medium hover:bg-emerald-700 transition-colors"
+                >
+                  <CheckCircle2 size={16} />
+                  Resolve
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}

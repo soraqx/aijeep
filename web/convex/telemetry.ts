@@ -33,19 +33,15 @@ export const getLatest = query({
   },
 });
 
-export const getRecentByJeepneyId = query({
+export const getLatestByJeepneyId = query({
   args: {
     jeepneyId: v.id("jeepneys"),
-    limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const requested = args.limit ?? 50;
-    const safeLimit = Math.max(1, Math.min(requested, 100));
-
     return await ctx.db
       .query("telemetry")
       .withIndex("by_jeepney_timestamp")
       .order("desc")
-      .take(safeLimit);
+      .first();
   },
 });

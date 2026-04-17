@@ -72,6 +72,49 @@ export const getActiveAlerts = query({
   },
 });
 
+export const getAllAlerts = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const requested = args.limit ?? 50;
+    const safeLimit = Math.max(1, Math.min(requested, 100));
+
+    const alerts = await ctx.db
+      .query("alerts")
+      .withIndex("by_timestamp")
+      .order("desc")
+      .take(safeLimit);
+
+    const withDetails = await Promise.all(
+      alerts.map(async (alert) => {
+        let imageUrl = null;
+        if (alert.snapshotStorageId) {
+          try {
+            imageUrl = await ctx.storage.getUrl(alert.snapshotStorageId);
+          } catch (e) {
+            console.warn(`Could not get URL for alert ${alert._id}:`, e);
+          }
+        }
+
+        const jeepney = await ctx.db.get(alert.jeepneyId);
+
+        return {
+          ...alert,
+          imageUrl,
+          jeepneyInfo: jeepney ? {
+            plateNumber: jeepney.plateNumber,
+            driverName: jeepney.driverName,
+            status: jeepney.status,
+          } : null,
+        };
+      })
+    );
+
+    return withDetails;
+  },
+});
+
 export const getAlertWithImage = query({
   args: { alertId: v.id("alerts") },
   handler: async (ctx, args) => {
@@ -92,6 +135,7 @@ export const getAlertWithImage = query({
     return {
       ...alert,
       imageUrl,
+      snapshotUrl: imageUrl,
       jeepneyInfo: jeepney ? {
         plateNumber: jeepney.plateNumber,
         driverName: jeepney.driverName,
@@ -171,5 +215,46 @@ export const resolveAlert = mutation({
   handler: async (ctx, args) => {
     await ctx.db.patch(args.alertId, { isResolved: true });
     return { success: true };
+  },
+});
+
+export const getAlertsByJeepneyId = query({
+  args: {
+    jeepneyId: v.id("jeepneys"),
+  },
+  handler: async (ctx, args) => {
+    const alerts = await ctx.db
+      .query("alerts")
+      .withIndex("by_jeepney_timestamp", (q) => q.eq("jeepneyId", args.jeepneyId))
+      .order("desc")
+      .take(20);
+
+    const withDetails = await Promise.all(
+      alerts.map(async (alert) => {
+        let imageUrl = null;
+        if (alert.snapshotStorageId) {
+          try {
+            imageUrl = await ctx.storage.getUrl(alert.snapshotStorageId);
+          } catch (e) {
+            console.warn(`Could not get URL for alert ${alert._id}:`, e);
+          }
+        }
+
+        const jeepney = await ctx.db.get(alert.jeepneyId);
+
+        return {
+          ...alert,
+          imageUrl,
+          snapshotUrl: imageUrl,
+          jeepneyInfo: jeepney ? {
+            plateNumber: jeepney.plateNumber,
+            driverName: jeepney.driverName,
+            status: jeepney.status,
+          } : null,
+        };
+      })
+    );
+
+    return withDetails;
   },
 });
