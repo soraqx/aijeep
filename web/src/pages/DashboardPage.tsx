@@ -17,6 +17,7 @@ import {
   Loader,
   Image,
   LogOut,
+  ArrowLeft,
 } from "lucide-react";
 import { useClerk } from "@clerk/clerk-react";
 import type { LatLngTuple } from "leaflet";
@@ -155,6 +156,7 @@ function determineStatus(earValue: number, acceleration: number): string {
 export function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
+  const [selectedJeepneyId, setSelectedJeepneyId] = useState<string | null>(null);
   const navigate = useNavigate();
   const { signOut } = useClerk();
 
@@ -163,6 +165,14 @@ export function DashboardPage() {
   const jeepneyData = useQuery(api.jeepneys.getAll, {});
   const alertData = useQuery(api.alerts.getActiveAlerts, {});
   const alertStats = useQuery(api.alerts.getAlertStats, {});
+
+  // Conditional telemetry fetch - only when a vehicle is selected
+  const vehicleTelemetryData = useQuery(
+    api.telemetry.getRecentByJeepneyId,
+    selectedJeepneyId 
+      ? { jeepneyId: selectedJeepneyId as any, limit: 50 } 
+      : "skip"
+  );
 
   const metroManilaCenter: LatLngTuple = [14.5995, 120.9842];
 
@@ -372,6 +382,141 @@ const telemetryRows = (telemetryData || []).slice(0, 10).map((telemetry: Telemet
                    loading={telemetryData === undefined}
                  />
               </section>
+
+              {/* Vehicle Detail View - Only shown when a vehicle is selected */}
+              {selectedJeepneyId && (
+                <section className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setSelectedJeepneyId(null)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                      >
+                        <ArrowLeft size={16} />
+                        Back to Fleet
+                      </button>
+                      <h2 className="text-lg font-semibold text-slate-800">
+                        {(() => {
+                          const jeepney = jeepneyData?.find((j: Jeepney) => j._id === selectedJeepneyId);
+                          return jeepney ? `${jeepney.plateNumber} - ${jeepney.driverName}` : "Vehicle Details";
+                        })()}
+                      </h2>
+                    </div>
+                    <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
+                      Detailed Telemetry
+                    </span>
+                  </div>
+
+                  {vehicleTelemetryData === undefined ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader size={20} className="animate-spin text-blue-600" />
+                      <span className="ml-2 text-sm text-slate-600">Loading vehicle telemetry...</span>
+                    </div>
+                  ) : vehicleTelemetryData.length === 0 ? (
+                    <p className="text-center text-sm text-slate-500 py-8">No telemetry data available for this vehicle</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-200">
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Time</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">EAR</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Speed</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">GPS</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Accel X</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Accel Y</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Accel Z</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {vehicleTelemetryData.map((telemetry: Telemetry, idx: number) => {
+                            const previousTelemetry = idx < vehicleTelemetryData.length - 1 ? vehicleTelemetryData[idx + 1] : null;
+                            const speedKmh = previousTelemetry
+                              ? calculateSpeed(
+                                  { gps: telemetry.gps, timestamp: telemetry.timestamp },
+                                  { gps: previousTelemetry.gps, timestamp: previousTelemetry.timestamp }
+                                )
+                              : 0;
+                            const gps = parseGPS(telemetry.gps);
+                            return (
+                              <tr key={telemetry._id} className="border-b border-slate-100 hover:bg-slate-50">
+                                <td className="px-3 py-2.5 font-mono text-slate-600">{new Date(telemetry.timestamp).toLocaleTimeString()}</td>
+                                <td className="px-3 py-2.5 text-slate-600">{telemetry.earValue.toFixed(2)}</td>
+                                <td className="px-3 py-2.5 text-slate-600">{speedKmh.toFixed(1)} km/h</td>
+                                <td className="px-3 py-2.5 font-mono text-slate-600 text-xs">
+                                  {gps ? `${gps[0].toFixed(4)}, ${gps[1].toFixed(4)}` : "N/A"}
+                                </td>
+                                <td className="px-3 py-2.5 text-slate-600">{telemetry.accelX.toFixed(2)}</td>
+                                <td className="px-3 py-2.5 text-slate-600">{telemetry.accelY.toFixed(2)}</td>
+                                <td className="px-3 py-2.5 text-slate-600">{telemetry.accelZ.toFixed(2)}</td>
+                                <td className="px-3 py-2.5">
+                                  <span
+                                    className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                                      determineStatus(telemetry.earValue, calculateAcceleration(telemetry.accelX, telemetry.accelY, telemetry.accelZ)) === "Normal"
+                                        ? "bg-emerald-100 text-emerald-700"
+                                        : determineStatus(telemetry.earValue, calculateAcceleration(telemetry.accelX, telemetry.accelY, telemetry.accelZ)) === "Monitoring"
+                                        ? "bg-blue-100 text-blue-700"
+                                        : "bg-amber-100 text-amber-700"
+                                    }`}
+                                  >
+                                    {determineStatus(telemetry.earValue, calculateAcceleration(telemetry.accelX, telemetry.accelY, telemetry.accelZ))}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {/* Fleet Overview - Vehicle Cards */}
+              {!selectedJeepneyId && (
+                <section className="mt-6">
+                  <h3 className="mb-4 text-sm font-semibold text-slate-700">Fleet Overview - Click a vehicle for details</h3>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {jeepneyData?.map((jeepney: Jeepney) => {
+                      const latestTelemetry = telemetryData?.find((t: Telemetry) => t.jeepneyId === jeepney._id);
+                      const accel = latestTelemetry ? calculateAcceleration(latestTelemetry.accelX, latestTelemetry.accelY, latestTelemetry.accelZ) : 0;
+                      const status = latestTelemetry ? determineStatus(latestTelemetry.earValue, accel) : "Unknown";
+                      
+                      return (
+                        <button
+                          key={jeepney._id}
+                          onClick={() => setSelectedJeepneyId(jeepney._id)}
+                          className="flex flex-col items-start rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-blue-400 hover:shadow-md"
+                        >
+                          <div className="flex w-full items-center justify-between">
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                              {jeepney.plateNumber}
+                            </span>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                status === "Normal"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : status === "Monitoring"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : "bg-amber-100 text-amber-700"
+                              }`}
+                            >
+                              {status}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-sm font-medium text-slate-900">{jeepney.driverName}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {latestTelemetry
+                              ? `EAR: ${latestTelemetry.earValue.toFixed(2)}`
+                              : "No telemetry"}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
 
               <section className="mt-5 grid grid-cols-1 gap-4 sm:mt-6 sm:gap-5 lg:grid-cols-12">
                 <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 lg:col-span-8">
