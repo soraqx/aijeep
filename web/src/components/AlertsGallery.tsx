@@ -60,66 +60,68 @@ export function AlertsGallery({ alerts, isLoading = false, onAlertResolved }: Al
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {alerts.map((alert) => (
-        <div key={alert._id} className="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm">
-          {alert.snapshotUrl ? (
-            <div className="aspect-video w-full overflow-hidden bg-slate-100">
-              <img 
-                src={alert.snapshotUrl} 
-                alt="incident snapshot" 
-                className="h-full w-full object-cover"
-              />
-            </div>
-          ) : (
-            <div className="flex aspect-video w-full items-center justify-center bg-slate-100">
-              <p className="text-xs text-slate-400">No snapshot available</p>
-            </div>
-          )}
-          <div className="p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                alert.alertType === "DROWSY" 
-                  ? "bg-red-100 text-red-700" 
-                  : alert.alertType === "HARSH_BRAKING"
-                  ? "bg-orange-100 text-orange-700"
-                  : "bg-slate-100 text-slate-700"
-              }`}>
-                {alert.alertType === "DROWSY" ? "DROWSY" : alert.alertType === "HARSH_BRAKING" ? "HARSH BRAKING" : alert.alertType}
-              </span>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                alert.isResolved 
-                  ? "bg-emerald-100 text-emerald-700" 
-                  : "bg-amber-100 text-amber-700"
-              }`}>
-                {alert.isResolved ? "Resolved" : "Active"}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500">{new Date(alert.timestamp).toLocaleString()}</p>
-            <div className="mt-3 pt-3 border-t border-slate-100">
-              {alert.isResolved ? (
-                <div className="flex items-center justify-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-slate-400 text-sm font-medium">
-                  <CheckCircle2 size={16} />
-                  Resolved
-                </div>
-              ) : resolvingId === alert._id ? (
-                <div className="flex items-center justify-center gap-2 rounded-lg bg-amber-100 px-3 py-2 text-amber-700 text-sm font-medium">
-                  <Loader2 size={16} className="animate-spin" />
-                  Resolving...
-                </div>
-              ) : (
-                <button
-                  onClick={() => handleResolve(alert._id)}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-white text-sm font-medium hover:bg-emerald-700 transition-colors"
-                >
-                  <CheckCircle2 size={16} />
-                  Resolve
-                </button>
-              )}
+    <div className="max-h-[60vh] overflow-y-auto overflow-x-hidden pr-2 scrollbar-thin scrollbar-thumb-slate-300">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 pb-4">
+        {alerts.map((alert) => (
+          <div key={alert._id} className="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm">
+            {alert.snapshotUrl ? (
+              <div className="aspect-video w-full overflow-hidden bg-slate-100">
+                <img 
+                  src={alert.snapshotUrl} 
+                  alt="incident snapshot" 
+                  className="h-full w-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className="flex aspect-video w-full items-center justify-center bg-slate-100">
+                <p className="text-xs text-slate-400">No snapshot available</p>
+              </div>
+            )}
+            <div className="p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                  alert.alertType === "DROWSY" 
+                    ? "bg-red-100 text-red-700" 
+                    : alert.alertType === "HARSH_BRAKING"
+                    ? "bg-orange-100 text-orange-700"
+                    : "bg-slate-100 text-slate-700"
+                }`}>
+                  {alert.alertType === "DROWSY" ? "DROWSY" : alert.alertType === "HARSH_BRAKING" ? "HARSH BRAKING" : alert.alertType}
+                </span>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                  alert.isResolved 
+                    ? "bg-emerald-100 text-emerald-700" 
+                    : "bg-amber-100 text-amber-700"
+                }`}>
+                  {alert.isResolved ? "Resolved" : "Active"}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">{new Date(alert.timestamp).toLocaleString()}</p>
+              <div className="mt-3 pt-3 border-t border-slate-100">
+                {alert.isResolved ? (
+                  <div className="flex items-center justify-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-slate-400 text-sm font-medium">
+                    <CheckCircle2 size={16} />
+                    Resolved
+                  </div>
+                ) : resolvingId === alert._id ? (
+                  <div className="flex items-center justify-center gap-2 rounded-lg bg-amber-100 px-3 py-2 text-amber-700 text-sm font-medium">
+                    <Loader2 size={16} className="animate-spin" />
+                    Resolving...
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleResolve(alert._id)}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-white text-sm font-medium hover:bg-emerald-700 transition-colors"
+                  >
+                    <CheckCircle2 size={16} />
+                    Resolve
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
