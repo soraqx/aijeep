@@ -494,12 +494,32 @@ const handleAlertResolved = () => {
                   ) : (
                     (() => {
                       const telemetry = vehicleTelemetryData;
+                      if (!telemetry) return null;
+                      
                       const gps = parseGPS(telemetry.gps);
                       const accel = calculateAcceleration(telemetry.accelX, telemetry.accelY, telemetry.accelZ);
                       const status = determineStatus(telemetry.earValue, accel);
+                      
+                      // Convert Unix timestamp (seconds) to milliseconds
+                      const telemetryTime = telemetry.timestamp * 1000;
                       const now = Date.now();
-                      const timeDiff = now - telemetry.timestamp;
-                      const timeAgo = timeDiff < 60000 ? "Just now" : `${Math.floor(timeDiff / 60000)} mins ago`;
+                      const timeDiff = now - telemetryTime;
+                      
+                      // Format relative time
+                      const getRelativeTime = (diff: number): string => {
+                        if (diff < 0) return "Just now";
+                        const seconds = Math.floor(diff / 1000);
+                        const minutes = Math.floor(seconds / 60);
+                        const hours = Math.floor(minutes / 60);
+                        const days = Math.floor(hours / 24);
+                        
+                        if (seconds < 60) return "Just now";
+                        if (minutes < 60) return `${minutes} min${minutes !== 1 ? 's' : ''} ago`;
+                        if (hours < 24) return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+                        return `${days} day${days !== 1 ? 's' : ''} ago`;
+                      };
+                      
+                      const timeAgo = getRelativeTime(timeDiff);
 
                       // Calculate speed using global telemetry data to find previous reading
                       const globalIndex = telemetryData?.findIndex((t) => t._id === telemetry._id) ?? -1;
