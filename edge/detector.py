@@ -231,7 +231,7 @@ def _upload_alert_snapshot(
 def main() -> None:
     print("AI-JEEP edge detector starting...")
 
-    SERIAL_PORT = os.environ.get("SERIAL_PORT", "/dev/ttyUSB0")
+    SERIAL_PORT = os.environ.get("SERIAL_PORT", "/dev/ttyUSB0", "/dev/ttyACM0")
     BAUDRATE = int(os.environ.get("SERIAL_BAUDRATE", "115200"))
     CAMERA_INDEX = int(os.environ.get("CAMERA_INDEX", "0"))
 
