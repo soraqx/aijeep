@@ -71,7 +71,7 @@ type Alert = {
   snapshotUrl?: string | null;
   jeepneyInfo?: {
     plateNumber: string;
-    driverName: string;
+    driverName: string | null; // <-- This is the fix
     status: string;
   } | null;
 };

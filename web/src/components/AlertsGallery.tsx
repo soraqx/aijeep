@@ -5,13 +5,16 @@ import { api } from "../../convex/_generated/api";
 
 type Alert = {
   _id: string;
-  snapshotUrl?: string | null;
+  _creationTime: number;
+  jeepneyId: string;
   alertType: string;
   timestamp: number;
   isResolved: boolean;
+  imageUrl?: string | null;
+  snapshotUrl?: string | null;
   jeepneyInfo?: {
     plateNumber: string;
-    driverName: string;
+    driverName: string | null; // <-- This is the fix
     status: string;
   } | null;
 };
@@ -66,9 +69,9 @@ export function AlertsGallery({ alerts, isLoading = false, onAlertResolved }: Al
           <div key={alert._id} className="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm">
             {alert.snapshotUrl ? (
               <div className="aspect-video w-full overflow-hidden bg-slate-100">
-                <img 
-                  src={alert.snapshotUrl} 
-                  alt="incident snapshot" 
+                <img
+                  src={alert.snapshotUrl}
+                  alt="incident snapshot"
                   className="h-full w-full object-cover"
                 />
               </div>
@@ -79,20 +82,18 @@ export function AlertsGallery({ alerts, isLoading = false, onAlertResolved }: Al
             )}
             <div className="p-3">
               <div className="mb-2 flex items-center justify-between">
-                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                  alert.alertType === "DROWSY" 
-                    ? "bg-red-100 text-red-700" 
-                    : alert.alertType === "HARSH_BRAKING"
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${alert.alertType === "DROWSY"
+                  ? "bg-red-100 text-red-700"
+                  : alert.alertType === "HARSH_BRAKING"
                     ? "bg-orange-100 text-orange-700"
                     : "bg-slate-100 text-slate-700"
-                }`}>
+                  }`}>
                   {alert.alertType === "DROWSY" ? "DROWSY" : alert.alertType === "HARSH_BRAKING" ? "HARSH BRAKING" : alert.alertType}
                 </span>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                  alert.isResolved 
-                    ? "bg-emerald-100 text-emerald-700" 
-                    : "bg-amber-100 text-amber-700"
-                }`}>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${alert.isResolved
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-amber-100 text-amber-700"
+                  }`}>
                   {alert.isResolved ? "Resolved" : "Active"}
                 </span>
               </div>
