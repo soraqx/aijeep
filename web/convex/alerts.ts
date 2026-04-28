@@ -208,6 +208,46 @@ export const getAlertsByDateRange = query({
   },
 });
 
+export const getSevenDayReport = query({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+
+    const alerts = await ctx.db
+      .query("alerts")
+      .withIndex("by_timestamp")
+      .filter((q) => q.gte(q.field("timestamp"), sevenDaysAgo))
+      .collect();
+
+    return await Promise.all(
+      alerts.map(async (alert) => {
+        const jeepney = await ctx.db.get(alert.jeepneyId);
+        const driver = jeepney?.activeDriverId
+          ? await ctx.db.get(jeepney.activeDriverId)
+          : null;
+
+        const alertDate = new Date(alert.timestamp).toISOString();
+        const [date, time] = alertDate.split("T");
+
+        return {
+          alertId: alert._id,
+          date,
+          time: time.replace("Z", ""),
+          plateNumber: jeepney?.plateNumber ?? null,
+          driverName: driver ? `${driver.firstName} ${driver.lastName}` : null,
+          alertType: alert.alertType,
+          isResolved: alert.isResolved,
+          confidenceScore: alert.confidenceScore ?? null,
+          snapshotFilename: alert.snapshotFilename ?? null,
+          jeepneyId: alert.jeepneyId,
+          driverId: jeepney?.activeDriverId ?? null,
+        };
+      })
+    );
+  },
+});
+
 export const resolveAlert = mutation({
   args: {
     alertId: v.id("alerts"),

@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 export const insert = mutation({
@@ -40,8 +40,32 @@ export const getLatestByJeepneyId = query({
   handler: async (ctx, args) => {
     return await ctx.db
       .query("telemetry")
-      .withIndex("by_jeepney_timestamp")
+      .withIndex("by_jeepney_timestamp", (q) => q.eq("jeepneyId", args.jeepneyId))
       .order("desc")
       .first();
+  },
+});
+
+export const pruneOldTelemetry = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const cutoff = now - 24 * 60 * 60 * 1000;
+
+    const oldTelemetry = await ctx.db
+      .query("telemetry")
+      .withIndex("by_timestamp")
+      .filter((q) => q.lt(q.field("timestamp"), cutoff))
+      .collect();
+
+    await Promise.all(
+      oldTelemetry.map(async (entry) => {
+        if (!entry.isAlertRelated) {
+          await ctx.db.delete(entry._id);
+        }
+      })
+    );
+
+    return { deleted: oldTelemetry.filter((entry) => !entry.isAlertRelated).length };
   },
 });
