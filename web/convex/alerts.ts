@@ -55,13 +55,16 @@ export const getActiveAlerts = query({
         }
 
         const jeepney = await ctx.db.get(alert.jeepneyId);
+        const driver = jeepney?.activeDriverId
+          ? await ctx.db.get(jeepney.activeDriverId)
+          : null;
 
         return {
           ...alert,
           imageUrl,
           jeepneyInfo: jeepney ? {
             plateNumber: jeepney.plateNumber,
-            driverName: jeepney.driverName,
+            driverName: driver ? `${driver.firstName} ${driver.lastName}` : null,
             status: jeepney.status,
           } : null,
         };
@@ -98,13 +101,16 @@ export const getAllAlerts = query({
         }
 
         const jeepney = await ctx.db.get(alert.jeepneyId);
+        const driver = jeepney?.activeDriverId
+          ? await ctx.db.get(jeepney.activeDriverId)
+          : null;
 
         return {
           ...alert,
           imageUrl,
           jeepneyInfo: jeepney ? {
             plateNumber: jeepney.plateNumber,
-            driverName: jeepney.driverName,
+            driverName: driver ? `${driver.firstName} ${driver.lastName}` : null,
             status: jeepney.status,
           } : null,
         };
@@ -131,6 +137,9 @@ export const getAlertWithImage = query({
     }
 
     const jeepney = await ctx.db.get(alert.jeepneyId);
+    const driver = jeepney?.activeDriverId
+      ? await ctx.db.get(jeepney.activeDriverId)
+      : null;
 
     return {
       ...alert,
@@ -138,7 +147,7 @@ export const getAlertWithImage = query({
       snapshotUrl: imageUrl,
       jeepneyInfo: jeepney ? {
         plateNumber: jeepney.plateNumber,
-        driverName: jeepney.driverName,
+        driverName: driver ? `${driver.firstName} ${driver.lastName}` : null,
         status: jeepney.status,
       } : null,
     };
@@ -281,6 +290,9 @@ export const getAlertsByJeepneyId = query({
         }
 
         const jeepney = await ctx.db.get(alert.jeepneyId);
+        const driver = jeepney?.activeDriverId
+          ? await ctx.db.get(jeepney.activeDriverId)
+          : null;
 
         return {
           ...alert,
@@ -288,7 +300,7 @@ export const getAlertsByJeepneyId = query({
           snapshotUrl: imageUrl,
           jeepneyInfo: jeepney ? {
             plateNumber: jeepney.plateNumber,
-            driverName: jeepney.driverName,
+            driverName: driver ? `${driver.firstName} ${driver.lastName}` : null,
             status: jeepney.status,
           } : null,
         };

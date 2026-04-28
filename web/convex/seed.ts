@@ -5,11 +5,19 @@ export const populate = mutation({
     handler: async (ctx) => {
         console.log("Seeding AI-JEEP database...");
 
-        // 1. Create a mock Jeepney profile
+        // 1. Create a mock Driver
+        const driverId = await ctx.db.insert("drivers", {
+            firstName: "Juan",
+            lastName: "Dela Cruz",
+            contactNumber: "+63 917 123 4567",
+            licenseNumber: "DL-2024-001",
+        });
+
+        // 2. Create a mock Jeepney profile
         const jeepneyId = await ctx.db.insert("jeepneys", {
             plateNumber: "PUJ 2026",
-            driverName: "Juan Dela Cruz",
-            status: "ACTIVE",
+            activeDriverId: driverId,
+            status: "active",
         });
 
         const now = Math.floor(Date.now() / 1000);

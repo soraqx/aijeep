@@ -9,7 +9,7 @@ type Jeepney = {
     _id: string;
     _creationTime: number;
     plateNumber: string;
-    driverName: string;
+    driverName: string | null;
     status: string;
 };
 
@@ -125,23 +125,23 @@ export function LiveMapView({
 
         const positions = new Map<string, Telemetry>();
         const previousPositions = new Map<string, { gps: string; timestamp: number }>();
-        
+
         // Group telemetry by jeepneyId to get the latest and previous for each
         const groupedByJeepney: Map<string, Telemetry[]> = new Map();
-        
+
         for (const telemetry of telemetryData) {
             if (!groupedByJeepney.has(telemetry.jeepneyId)) {
                 groupedByJeepney.set(telemetry.jeepneyId, []);
             }
             groupedByJeepney.get(telemetry.jeepneyId)!.push(telemetry);
         }
-        
+
         // For each jeepney, sort by timestamp and get latest and previous
         for (const [jeepneyId, telemetrys] of groupedByJeepney.entries()) {
             const sorted = [...telemetrys].sort((a, b) => a.timestamp - b.timestamp);
             const latest = sorted[sorted.length - 1];
             positions.set(jeepneyId, latest);
-            
+
             // Store previous position if exists
             if (sorted.length >= 2) {
                 const previous = sorted[sorted.length - 2];
@@ -151,7 +151,7 @@ export function LiveMapView({
                 });
             }
         }
-        
+
         jeepneyPositionsRef.current = positions;
         jeepneyPreviousPositionsRef.current = previousPositions;
     }, [telemetryData]);
@@ -224,21 +224,21 @@ export function LiveMapView({
                 </Marker>
 
                 {/* Dynamic Jeepney Markers */}
-{Array.from(jeepneyPositionsRef.current.values()).map((telemetry: Telemetry) => {
-                     const gpsPosition = parseGPS(telemetry.gps);
-                     const jeepney = jeepneyData?.find((j: Jeepney) => j._id === telemetry.jeepneyId);
-                     const accel = calculateAcceleration(telemetry.accelX, telemetry.accelY, telemetry.accelZ);
-                     const status = determineStatus(telemetry.earValue, accel);
-                     const isSelected = selectedJeepneyId === telemetry.jeepneyId;
-                     
-                     // Calculate speed using current and previous telemetry
-                     const previousTelemetry = jeepneyPreviousPositionsRef.current.get(telemetry.jeepneyId);
-                     const speedKmh = previousTelemetry 
-                         ? calculateSpeed(
-                             { gps: telemetry.gps, timestamp: telemetry.timestamp },
-                             previousTelemetry
-                           )
-                         : 0;
+                {Array.from(jeepneyPositionsRef.current.values()).map((telemetry: Telemetry) => {
+                    const gpsPosition = parseGPS(telemetry.gps);
+                    const jeepney = jeepneyData?.find((j: Jeepney) => j._id === telemetry.jeepneyId);
+                    const accel = calculateAcceleration(telemetry.accelX, telemetry.accelY, telemetry.accelZ);
+                    const status = determineStatus(telemetry.earValue, accel);
+                    const isSelected = selectedJeepneyId === telemetry.jeepneyId;
+
+                    // Calculate speed using current and previous telemetry
+                    const previousTelemetry = jeepneyPreviousPositionsRef.current.get(telemetry.jeepneyId);
+                    const speedKmh = previousTelemetry
+                        ? calculateSpeed(
+                            { gps: telemetry.gps, timestamp: telemetry.timestamp },
+                            previousTelemetry
+                        )
+                        : 0;
 
                     // Create a custom icon with visual feedback for selection
                     const selectedIconHtml = isSelected
@@ -264,18 +264,18 @@ export function LiveMapView({
                                 click: () => handleMarkerClick(telemetry.jeepneyId),
                             }}
                         >
-<Popup>
-                                 <div className="text-sm space-y-1">
-                                     <p className="font-semibold text-slate-900">{jeepney?.plateNumber || "Unknown"}</p>
-                                     <p className="text-xs text-slate-600">Driver: {jeepney?.driverName || "Unknown"}</p>
-                                     <p className="text-xs text-slate-600">Status: {status}</p>
-                                     <p className="text-xs text-slate-600">EAR: {telemetry.earValue.toFixed(2)}</p>
-                                     <p className="text-xs text-slate-600">Speed: {speedKmh.toFixed(1)} km/h</p>
-                                     {isSelected && (
-                                         <p className="text-xs font-semibold text-blue-600 mt-2">📍 Tracking Active</p>
-                                     )}
-                                 </div>
-                             </Popup>
+                            <Popup>
+                                <div className="text-sm space-y-1">
+                                    <p className="font-semibold text-slate-900">{jeepney?.plateNumber || "Unknown"}</p>
+                                    <p className="text-xs text-slate-600">Driver: {jeepney?.driverName || "Unknown"}</p>
+                                    <p className="text-xs text-slate-600">Status: {status}</p>
+                                    <p className="text-xs text-slate-600">EAR: {telemetry.earValue.toFixed(2)}</p>
+                                    <p className="text-xs text-slate-600">Speed: {speedKmh.toFixed(1)} km/h</p>
+                                    {isSelected && (
+                                        <p className="text-xs font-semibold text-blue-600 mt-2">📍 Tracking Active</p>
+                                    )}
+                                </div>
+                            </Popup>
                         </Marker>
                     );
                 })}
@@ -297,56 +297,56 @@ export function LiveMapView({
                             <X size={18} />
                         </button>
                     </div>
-{jeepneyPositionsRef.current.get(selectedJeepneyId) && (
-                             <div className="space-y-2 text-sm">
-                                 <div>
-                                     <p className="text-xs text-blue-700 font-semibold">VEHICLE</p>
-                                     <p className="text-blue-900">
-                                         {jeepneyData?.find((j) => j._id === selectedJeepneyId)?.plateNumber || "Unknown"}
-                                     </p>
-                                 </div>
-                                 <div>
-                                     <p className="text-xs text-blue-700 font-semibold">DRIVER</p>
-                                     <p className="text-blue-900">
-                                         {jeepneyData?.find((j) => j._id === selectedJeepneyId)?.driverName || "Unknown"}
-                                     </p>
-                                 </div>
-                                 <div>
-                                     <p className="text-xs text-blue-700 font-semibold">COORDINATES</p>
-                                     <p className="font-mono text-xs text-blue-900">
-                                         {selectedPosition ? `${selectedPosition[0].toFixed(4)}, ${selectedPosition[1].toFixed(4)}` : "..."}
-                                     </p>
-                                 </div>
-                                 <div>
-                                     <p className="text-xs text-blue-700 font-semibold">STATUS</p>
-                                     {jeepneyPositionsRef.current.get(selectedJeepneyId) && (
-                                         <p className="text-blue-900">
-                                             {determineStatus(
-                                                 jeepneyPositionsRef.current.get(selectedJeepneyId)!.earValue,
-                                                 calculateAcceleration(
-                                                     jeepneyPositionsRef.current.get(selectedJeepneyId)!.accelX,
-                                                     jeepneyPositionsRef.current.get(selectedJeepneyId)!.accelY,
-                                                     jeepneyPositionsRef.current.get(selectedJeepneyId)!.accelZ
-                                                 )
-                                             )}
-                                         </p>
-                                     )}
-                                 </div>
-                                 <div>
-                                     <p className="text-xs text-blue-700 font-semibold">SPEED</p>
-                                     {jeepneyPositionsRef.current.get(selectedJeepneyId) && jeepneyPreviousPositionsRef.current.get(selectedJeepneyId) ? (
-                                         <p className="text-blue-900">
-                                             {calculateSpeed(
-                                                 { gps: jeepneyPositionsRef.current.get(selectedJeepneyId)!.gps, timestamp: jeepneyPositionsRef.current.get(selectedJeepneyId)!.timestamp },
-                                                 jeepneyPreviousPositionsRef.current.get(selectedJeepneyId)!
-                                             ).toFixed(1)} km/h
-                                         </p>
-                                     ) : (
-                                         <p className="text-blue-900">0 km/h</p>
-                                     )}
-                                 </div>
-                             </div>
-                         )}
+                    {jeepneyPositionsRef.current.get(selectedJeepneyId) && (
+                        <div className="space-y-2 text-sm">
+                            <div>
+                                <p className="text-xs text-blue-700 font-semibold">VEHICLE</p>
+                                <p className="text-blue-900">
+                                    {jeepneyData?.find((j) => j._id === selectedJeepneyId)?.plateNumber || "Unknown"}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-blue-700 font-semibold">DRIVER</p>
+                                <p className="text-blue-900">
+                                    {jeepneyData?.find((j) => j._id === selectedJeepneyId)?.driverName || "Unknown"}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-blue-700 font-semibold">COORDINATES</p>
+                                <p className="font-mono text-xs text-blue-900">
+                                    {selectedPosition ? `${selectedPosition[0].toFixed(4)}, ${selectedPosition[1].toFixed(4)}` : "..."}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-blue-700 font-semibold">STATUS</p>
+                                {jeepneyPositionsRef.current.get(selectedJeepneyId) && (
+                                    <p className="text-blue-900">
+                                        {determineStatus(
+                                            jeepneyPositionsRef.current.get(selectedJeepneyId)!.earValue,
+                                            calculateAcceleration(
+                                                jeepneyPositionsRef.current.get(selectedJeepneyId)!.accelX,
+                                                jeepneyPositionsRef.current.get(selectedJeepneyId)!.accelY,
+                                                jeepneyPositionsRef.current.get(selectedJeepneyId)!.accelZ
+                                            )
+                                        )}
+                                    </p>
+                                )}
+                            </div>
+                            <div>
+                                <p className="text-xs text-blue-700 font-semibold">SPEED</p>
+                                {jeepneyPositionsRef.current.get(selectedJeepneyId) && jeepneyPreviousPositionsRef.current.get(selectedJeepneyId) ? (
+                                    <p className="text-blue-900">
+                                        {calculateSpeed(
+                                            { gps: jeepneyPositionsRef.current.get(selectedJeepneyId)!.gps, timestamp: jeepneyPositionsRef.current.get(selectedJeepneyId)!.timestamp },
+                                            jeepneyPreviousPositionsRef.current.get(selectedJeepneyId)!
+                                        ).toFixed(1)} km/h
+                                    </p>
+                                ) : (
+                                    <p className="text-blue-900">0 km/h</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
                     <p className="mt-3 text-xs text-blue-600 italic">Map will center and track this vehicle</p>
                 </div>
             )}

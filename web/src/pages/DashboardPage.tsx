@@ -176,6 +176,7 @@ export function DashboardPage() {
   const alertData = useQuery(api.alerts.getActiveAlerts, {});
   const allAlertsData = useQuery(api.alerts.getAllAlerts, { limit: 50 });
   const alertStats = useQuery(api.alerts.getAlertStats, {});
+  const sevenDayReport = useQuery(api.alerts.getSevenDayReport, {});
 
   // Conditional telemetry fetch - only when a vehicle is selected
   const vehicleTelemetryData = useQuery(
@@ -230,7 +231,7 @@ export function DashboardPage() {
   const vehiclesWithAlerts: {
     jeepneyId: string;
     plateNumber: string;
-    driverName: string;
+    driverName: string | null;
     activeAlerts: number;
     drowsyAlerts: number;
     lastAlertTimestamp: number;
@@ -249,17 +250,17 @@ export function DashboardPage() {
 
     // Create vehicle summary objects
     Object.keys(alertsByJeepney).forEach((jeepneyId) => {
-      const jeepney = jeepneyData.find((j) => j._id === jeepneyId);
+      const jeepney = (jeepneyData as any[])?.find((j: any) => j._id === jeepneyId);
       if (jeepney) {
         const alerts = alertsByJeepney[jeepneyId];
-        const activeAlerts = alerts.filter((a) => !a.isResolved).length;
-        const drowsyAlerts = alerts.filter((a) => a.alertType === "DROWSY" && !a.isResolved).length;
-        const lastAlertTimestamp = Math.max(...alerts.map((a) => a.timestamp));
+        const activeAlerts = alerts.filter((a: any) => !a.isResolved).length;
+        const drowsyAlerts = alerts.filter((a: any) => a.alertType === "DROWSY" && !a.isResolved).length;
+        const lastAlertTimestamp = Math.max(...alerts.map((a: any) => a.timestamp));
 
         vehiclesWithAlerts.push({
           jeepneyId,
           plateNumber: jeepney.plateNumber,
-          driverName: jeepney.driverName,
+          driverName: jeepney.driverName || null,
           activeAlerts,
           drowsyAlerts,
           lastAlertTimestamp
@@ -288,15 +289,46 @@ export function DashboardPage() {
     setTimeout(() => setSelectedAlertJeepneyId(currentId), 50);
   };
 
+  const exportToCSV = () => {
+    if (!sevenDayReport || !Array.isArray(sevenDayReport)) return;
+
+    const headers = ["Date", "Time", "Plate Number", "Driver Name", "Alert Type", "Status"];
+    const rows = sevenDayReport.map((alert: any) => [
+      alert.date,
+      alert.time,
+      alert.plateNumber || "Unknown",
+      alert.driverName || "Unknown",
+      alert.alertType,
+      alert.isResolved ? "Resolved" : "Active"
+    ]);
+
+    const csvContent = [
+      headers,
+      ...rows
+    ]
+      .map((row: any[]) => row.map((field: any) => `"${field}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `alerts-7day-report-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
 
 
   // Count metrics
   const activeJeepneyCount = jeepneyData?.length || 0;
-  const alertCount = alertData?.filter((a: Alert) => !a.isResolved).length || 0;
-  const drowsinessCount = (alertData || []).filter((a: Alert) => a.alertType === "drowsiness" && !a.isResolved).length;
-  const erraticCount = (alertData || []).filter((a: Alert) => a.alertType === "erratic_driving" && !a.isResolved).length;
+  const alertCount = (alertData as any[])?.filter((a: any) => !a.isResolved).length || 0;
+  const drowsinessCount = ((alertData as any[]) || []).filter((a: any) => a.alertType === "drowsiness" && !a.isResolved).length;
+  const erraticCount = ((alertData as any[]) || []).filter((a: any) => a.alertType === "erratic_driving" && !a.isResolved).length;
   const totalAlertCount = allAlertsData?.length || 0;
-  const resolvedAlertCount = (allAlertsData || []).filter((a: Alert) => a.isResolved).length;
+  const resolvedAlertCount = ((allAlertsData as any[]) || []).filter((a: any) => a.isResolved).length;
 
   const onTabChange = (tab: DashboardTab) => {
     setActiveTab(tab);
@@ -474,8 +506,8 @@ export function DashboardPage() {
                       </button>
                       <h2 className="text-lg font-semibold text-slate-800">
                         {(() => {
-                          const jeepney = jeepneyData?.find((j: Jeepney) => j._id === selectedJeepneyId);
-                          return jeepney ? `${jeepney.plateNumber} - ${jeepney.driverName}` : "Vehicle Details";
+                          const jeepney = (jeepneyData as any[])?.find((j: any) => j._id === selectedJeepneyId);
+                          return jeepney ? `${jeepney.plateNumber} - ${jeepney.driverName || "Unknown"}` : "Vehicle Details";
                         })()}
                       </h2>
                     </div>
@@ -585,7 +617,7 @@ export function DashboardPage() {
                                 <Marker position={gps} icon={jeepneyIcon}>
                                   <Popup>
                                     {(() => {
-                                      const jeepney = jeepneyData?.find((j: Jeepney) => j._id === selectedJeepneyId);
+                                      const jeepney = (jeepneyData as any[])?.find((j: any) => j._id === selectedJeepneyId);
                                       return jeepney?.plateNumber || "Vehicle";
                                     })()}
                                   </Popup>
@@ -607,8 +639,8 @@ export function DashboardPage() {
                 <section className="mt-6">
                   <h3 className="mb-4 text-sm font-semibold text-slate-700">Fleet Overview - Click a vehicle for details</h3>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {jeepneyData?.map((jeepney: Jeepney) => {
-                      const latestTelemetry = telemetryData?.find((t: Telemetry) => t.jeepneyId === jeepney._id);
+                    {(jeepneyData as any[])?.map((jeepney: any) => {
+                      const latestTelemetry = (telemetryData as any[])?.find((t: any) => t.jeepneyId === jeepney._id);
                       const accel = latestTelemetry ? calculateAcceleration(latestTelemetry.accelX, latestTelemetry.accelY, latestTelemetry.accelZ) : 0;
                       const status = latestTelemetry ? determineStatus(latestTelemetry.earValue, accel) : "Unknown";
 
@@ -624,10 +656,10 @@ export function DashboardPage() {
                             </span>
                             <span
                               className={`rounded-full px-2 py-0.5 text-xs font-medium ${status === "Normal"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : status === "Monitoring"
-                                    ? "bg-blue-100 text-blue-700"
-                                    : "bg-amber-100 text-amber-700"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : status === "Monitoring"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : "bg-amber-100 text-amber-700"
                                 }`}
                             >
                               {status}
@@ -802,16 +834,16 @@ export function DashboardPage() {
                               <div key={alert._id} className="p-3 rounded-lg border border-slate-200 bg-slate-50">
                                 <div className="flex items-center justify-between mb-2">
                                   <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${alert.alertType === "DROWSY"
-                                      ? "bg-red-100 text-red-700"
-                                      : alert.alertType === "HARSH_BRAKING"
-                                        ? "bg-orange-100 text-orange-700"
-                                        : "bg-slate-100 text-slate-700"
+                                    ? "bg-red-100 text-red-700"
+                                    : alert.alertType === "HARSH_BRAKING"
+                                      ? "bg-orange-100 text-orange-700"
+                                      : "bg-slate-100 text-slate-700"
                                     }`}>
                                     {alert.alertType === "DROWSY" ? "DROWSY" : alert.alertType === "HARSH_BRAKING" ? "HARSH BRAKING" : alert.alertType}
                                   </span>
                                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${alert.isResolved
-                                      ? "bg-emerald-100 text-emerald-700"
-                                      : "bg-amber-100 text-amber-700"
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : "bg-amber-100 text-amber-700"
                                     }`}>
                                     {alert.isResolved ? "Resolved" : "Active"}
                                   </span>
@@ -866,8 +898,8 @@ export function DashboardPage() {
                                 setSelectedVehicleName(`${vehicle.plateNumber} - ${vehicle.driverName}`);
                               }}
                               className={`relative overflow-hidden rounded-xl border border-amber-200 bg-white p-4 hover:border-amber-300 hover:shadow-md transition-all ${vehicle.activeAlerts > 0 && vehicle.drowsyAlerts > 0
-                                  ? "border-red-300"
-                                  : ""
+                                ? "border-red-300"
+                                : ""
                                 }`}
                             >
                               <div className="mb-2 flex items-center justify-between">
@@ -877,8 +909,8 @@ export function DashboardPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${vehicle.activeAlerts > 0
-                                      ? "bg-amber-100 text-amber-700"
-                                      : "bg-emerald-100 text-emerald-700"
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-emerald-100 text-emerald-700"
                                     }`}>
                                     {vehicle.activeAlerts} Active
                                   </span>
