@@ -172,7 +172,7 @@ export function DashboardPage() {
 
   // Fetch live data from Convex
   const telemetryData = useQuery(api.telemetry.getLatest, { limit: 100 });
-  const jeepneyData = useQuery(api.jeepneys.getAll, {});
+  const jeepneyData = useQuery(api.jeepneys.getJeepneys, {});
   const alertData = useQuery(api.alerts.getActiveAlerts, {});
   const allAlertsData = useQuery(api.alerts.getAllAlerts, { limit: 50 });
   const alertStats = useQuery(api.alerts.getAlertStats, {});
@@ -180,8 +180,8 @@ export function DashboardPage() {
   // Conditional telemetry fetch - only when a vehicle is selected
   const vehicleTelemetryData = useQuery(
     api.telemetry.getLatestByJeepneyId,
-    selectedJeepneyId 
-      ? { jeepneyId: selectedJeepneyId as any } 
+    selectedJeepneyId
+      ? { jeepneyId: selectedJeepneyId as any }
       : "skip"
   );
 
@@ -205,88 +205,88 @@ export function DashboardPage() {
     shadowSize: [41, 41],
   });
 
-// Process telemetry data for table display - now with speed calculation
-const telemetryRows = (telemetryData || []).slice(0, 10).map((telemetry: Telemetry, index: number) => {
-  // Calculate speed using current and previous telemetry point
-  const previousTelemetry = index > 0 ? (telemetryData || [])[index - 1] : null;
-  const speedKmh = previousTelemetry 
-    ? calculateSpeed(
+  // Process telemetry data for table display - now with speed calculation
+  const telemetryRows = (telemetryData || []).slice(0, 10).map((telemetry: Telemetry, index: number) => {
+    // Calculate speed using current and previous telemetry point
+    const previousTelemetry = index > 0 ? (telemetryData || [])[index - 1] : null;
+    const speedKmh = previousTelemetry
+      ? calculateSpeed(
         { gps: telemetry.gps, timestamp: telemetry.timestamp },
         { gps: previousTelemetry.gps, timestamp: previousTelemetry.timestamp }
       )
-    : 0;
-  
-  const jeepney = jeepneyData?.find((j: Jeepney) => j._id === telemetry.jeepneyId);
-  return {
-    time: new Date(telemetry.timestamp).toLocaleTimeString(),
-    jeepney: jeepney?.plateNumber || "Unknown",
-    ear: telemetry.earValue.toFixed(2),
-    speed: speedKmh.toFixed(1) + " km/h",
-    status: determineStatus(telemetry.earValue, calculateAcceleration(telemetry.accelX, telemetry.accelY, telemetry.accelZ)),
+      : 0;
+
+    const jeepney = jeepneyData?.find((j: Jeepney) => j._id === telemetry.jeepneyId);
+    return {
+      time: new Date(telemetry.timestamp).toLocaleTimeString(),
+      jeepney: jeepney?.plateNumber || "Unknown",
+      ear: telemetry.earValue.toFixed(2),
+      speed: speedKmh.toFixed(1) + " km/h",
+      status: determineStatus(telemetry.earValue, calculateAcceleration(telemetry.accelX, telemetry.accelY, telemetry.accelZ)),
+    };
+  });
+
+  // Process alerts data for the Alerts tab - group by jeepney
+  const vehiclesWithAlerts: {
+    jeepneyId: string;
+    plateNumber: string;
+    driverName: string;
+    activeAlerts: number;
+    drowsyAlerts: number;
+    lastAlertTimestamp: number;
+  }[] = [];
+
+  if (allAlertsData && jeepneyData) {
+    // Group alerts by jeepneyId
+    const alertsByJeepney: Record<string, Alert[]> = {};
+
+    allAlertsData.forEach((alert) => {
+      if (!alertsByJeepney[alert.jeepneyId]) {
+        alertsByJeepney[alert.jeepneyId] = [];
+      }
+      alertsByJeepney[alert.jeepneyId].push(alert);
+    });
+
+    // Create vehicle summary objects
+    Object.keys(alertsByJeepney).forEach((jeepneyId) => {
+      const jeepney = jeepneyData.find((j) => j._id === jeepneyId);
+      if (jeepney) {
+        const alerts = alertsByJeepney[jeepneyId];
+        const activeAlerts = alerts.filter((a) => !a.isResolved).length;
+        const drowsyAlerts = alerts.filter((a) => a.alertType === "DROWSY" && !a.isResolved).length;
+        const lastAlertTimestamp = Math.max(...alerts.map((a) => a.timestamp));
+
+        vehiclesWithAlerts.push({
+          jeepneyId,
+          plateNumber: jeepney.plateNumber,
+          driverName: jeepney.driverName,
+          activeAlerts,
+          drowsyAlerts,
+          lastAlertTimestamp
+        });
+      }
+    });
+
+    // Sort by most recent alert first
+    vehiclesWithAlerts.sort((a, b) => b.lastAlertTimestamp - a.lastAlertTimestamp);
+  }
+
+  // Conditional alerts fetch for vehicle detail view (modal)
+  const selectedVehicleAlerts = useQuery(
+    api.alerts.getAlertsByJeepneyId,
+    selectedAlertJeepneyId
+      ? { jeepneyId: selectedAlertJeepneyId as any }
+      : "skip"
+  );
+
+  const selectedVehicleAlertsLoading = selectedVehicleAlerts === undefined;
+
+  const handleAlertResolved = () => {
+    // Trigger a refresh by briefly clearing and re-setting the selected jeepney
+    const currentId = selectedAlertJeepneyId;
+    setSelectedAlertJeepneyId(null);
+    setTimeout(() => setSelectedAlertJeepneyId(currentId), 50);
   };
-});
-
-// Process alerts data for the Alerts tab - group by jeepney
-const vehiclesWithAlerts: {
-  jeepneyId: string;
-  plateNumber: string;
-  driverName: string;
-  activeAlerts: number;
-  drowsyAlerts: number;
-  lastAlertTimestamp: number;
-}[] = [];
-
-if (allAlertsData && jeepneyData) {
-  // Group alerts by jeepneyId
-  const alertsByJeepney: Record<string, Alert[]> = {};
-  
-  allAlertsData.forEach((alert) => {
-    if (!alertsByJeepney[alert.jeepneyId]) {
-      alertsByJeepney[alert.jeepneyId] = [];
-    }
-    alertsByJeepney[alert.jeepneyId].push(alert);
-  });
-  
-  // Create vehicle summary objects
-  Object.keys(alertsByJeepney).forEach((jeepneyId) => {
-    const jeepney = jeepneyData.find((j) => j._id === jeepneyId);
-    if (jeepney) {
-      const alerts = alertsByJeepney[jeepneyId];
-      const activeAlerts = alerts.filter((a) => !a.isResolved).length;
-      const drowsyAlerts = alerts.filter((a) => a.alertType === "DROWSY" && !a.isResolved).length;
-      const lastAlertTimestamp = Math.max(...alerts.map((a) => a.timestamp));
-      
-      vehiclesWithAlerts.push({
-        jeepneyId,
-        plateNumber: jeepney.plateNumber,
-        driverName: jeepney.driverName,
-        activeAlerts,
-        drowsyAlerts,
-        lastAlertTimestamp
-      });
-    }
-  });
-  
-  // Sort by most recent alert first
-  vehiclesWithAlerts.sort((a, b) => b.lastAlertTimestamp - a.lastAlertTimestamp);
-}
-
-// Conditional alerts fetch for vehicle detail view (modal)
-const selectedVehicleAlerts = useQuery(
-  api.alerts.getAlertsByJeepneyId,
-  selectedAlertJeepneyId
-    ? { jeepneyId: selectedAlertJeepneyId as any }
-    : "skip"
-);
-
-const selectedVehicleAlertsLoading = selectedVehicleAlerts === undefined;
-
-const handleAlertResolved = () => {
-  // Trigger a refresh by briefly clearing and re-setting the selected jeepney
-  const currentId = selectedAlertJeepneyId;
-  setSelectedAlertJeepneyId(null);
-  setTimeout(() => setSelectedAlertJeepneyId(currentId), 50);
-};
 
 
 
@@ -364,52 +364,52 @@ const handleAlertResolved = () => {
             </button>
           </div>
 
-           <nav className="space-y-2">
-             <NavItem
-               label="Dashboard Overview"
-               icon={<LayoutDashboard size={16} />}
-               active={activeTab === "overview"}
-               onClick={() => onTabChange("overview")}
-             />
-             <NavItem
-               label="Live Map View"
-               icon={<MapPinned size={16} />}
-               active={activeTab === "live-map"}
-               onClick={() => onTabChange("live-map")}
-             />
-<NavItem
-                label="Alerts & Incidents"
-                icon={<Siren size={16} />}
-                active={activeTab === "alerts"}
-                onClick={() => onTabChange("alerts")}
-              />
-              <NavItem
-                label="System Health"
-               icon={<ShieldCheck size={16} />}
-               active={activeTab === "health"}
-               onClick={() => onTabChange("health")}
-             />
-             <NavItem
-               label="Users"
-               icon={<Users size={16} />}
-               active={activeTab === "users"}
-               onClick={() => onTabChange("users")}
-             />
-           </nav>
-           
-            <div className="mt-6 pt-5 border-t border-slate-200">
-             <button
-               onClick={async () => {
-                 await signOut();
-               }}
-               className="w-full flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-medium transition text-slate-700 hover:bg-slate-100 hover:text-slate-900"
-             >
-               <span className="flex items-center gap-2">
-                 <LogOut size={16} className="text-slate-500 group-hover:text-slate-700" />
-                 Sign Out
-               </span>
-             </button>
-           </div>
+          <nav className="space-y-2">
+            <NavItem
+              label="Dashboard Overview"
+              icon={<LayoutDashboard size={16} />}
+              active={activeTab === "overview"}
+              onClick={() => onTabChange("overview")}
+            />
+            <NavItem
+              label="Live Map View"
+              icon={<MapPinned size={16} />}
+              active={activeTab === "live-map"}
+              onClick={() => onTabChange("live-map")}
+            />
+            <NavItem
+              label="Alerts & Incidents"
+              icon={<Siren size={16} />}
+              active={activeTab === "alerts"}
+              onClick={() => onTabChange("alerts")}
+            />
+            <NavItem
+              label="System Health"
+              icon={<ShieldCheck size={16} />}
+              active={activeTab === "health"}
+              onClick={() => onTabChange("health")}
+            />
+            <NavItem
+              label="Users"
+              icon={<Users size={16} />}
+              active={activeTab === "users"}
+              onClick={() => onTabChange("users")}
+            />
+          </nav>
+
+          <div className="mt-6 pt-5 border-t border-slate-200">
+            <button
+              onClick={async () => {
+                await signOut();
+              }}
+              className="w-full flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-medium transition text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+            >
+              <span className="flex items-center gap-2">
+                <LogOut size={16} className="text-slate-500 group-hover:text-slate-700" />
+                Sign Out
+              </span>
+            </button>
+          </div>
         </aside>
 
         <main className="w-full p-4 sm:p-6 lg:p-8">
@@ -439,25 +439,25 @@ const handleAlertResolved = () => {
                   tone={activeJeepneyCount > 0 ? "success" : "default"}
                   loading={jeepneyData === undefined}
                 />
-<MetricCard
-                   title="Current Speed"
-                   value={telemetryData && telemetryData.length > 0 
-                     ? ((() => {
-                         const latest = telemetryData[telemetryData.length - 1];
-                         const previous = telemetryData.length > 1 ? telemetryData[telemetryData.length - 2] : null;
-                         if (!latest || !previous) return "0";
-                         const speed = calculateSpeed(
-                           { gps: latest.gps, timestamp: latest.timestamp },
-                           { gps: previous.gps, timestamp: previous.timestamp }
-                         );
-                         return speed.toFixed(1);
-                       })())
-                     : "0"
-                   }
-                   subtitle="Speed of latest telemetry reading"
-                   icon={<Activity size={18} />}
-                   loading={telemetryData === undefined}
-                 />
+                <MetricCard
+                  title="Current Speed"
+                  value={telemetryData && telemetryData.length > 0
+                    ? ((() => {
+                      const latest = telemetryData[telemetryData.length - 1];
+                      const previous = telemetryData.length > 1 ? telemetryData[telemetryData.length - 2] : null;
+                      if (!latest || !previous) return "0";
+                      const speed = calculateSpeed(
+                        { gps: latest.gps, timestamp: latest.timestamp },
+                        { gps: previous.gps, timestamp: previous.timestamp }
+                      );
+                      return speed.toFixed(1);
+                    })())
+                    : "0"
+                  }
+                  subtitle="Speed of latest telemetry reading"
+                  icon={<Activity size={18} />}
+                  loading={telemetryData === undefined}
+                />
               </section>
 
               {/* Vehicle Detail View - Only shown when a vehicle is selected */}
@@ -495,16 +495,16 @@ const handleAlertResolved = () => {
                     (() => {
                       const telemetry = vehicleTelemetryData;
                       if (!telemetry) return null;
-                      
+
                       const gps = parseGPS(telemetry.gps);
                       const accel = calculateAcceleration(telemetry.accelX, telemetry.accelY, telemetry.accelZ);
                       const status = determineStatus(telemetry.earValue, accel);
-                      
+
                       // Convert Unix timestamp (seconds) to milliseconds
                       const telemetryTime = telemetry.timestamp * 1000;
                       const now = Date.now();
                       const timeDiff = now - telemetryTime;
-                      
+
                       // Format relative time
                       const getRelativeTime = (diff: number): string => {
                         if (diff < 0) return "Just now";
@@ -512,13 +512,13 @@ const handleAlertResolved = () => {
                         const minutes = Math.floor(seconds / 60);
                         const hours = Math.floor(minutes / 60);
                         const days = Math.floor(hours / 24);
-                        
+
                         if (seconds < 60) return "Just now";
                         if (minutes < 60) return `${minutes} min${minutes !== 1 ? 's' : ''} ago`;
                         if (hours < 24) return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
                         return `${days} day${days !== 1 ? 's' : ''} ago`;
                       };
-                      
+
                       const timeAgo = getRelativeTime(timeDiff);
 
                       // Calculate speed using global telemetry data to find previous reading
@@ -526,9 +526,9 @@ const handleAlertResolved = () => {
                       const previousTelemetry = globalIndex > 0 ? telemetryData?.[globalIndex + 1] : null;
                       const speedKmh = previousTelemetry
                         ? calculateSpeed(
-                            { gps: telemetry.gps, timestamp: telemetry.timestamp },
-                            { gps: previousTelemetry.gps, timestamp: previousTelemetry.timestamp }
-                          )
+                          { gps: telemetry.gps, timestamp: telemetry.timestamp },
+                          { gps: previousTelemetry.gps, timestamp: previousTelemetry.timestamp }
+                        )
                         : telemetry.speedKmh ?? 0;
 
                       return (
@@ -542,7 +542,7 @@ const handleAlertResolved = () => {
                                 <span className="ml-1 text-sm font-normal text-slate-500">km/h</span>
                               </p>
                             </div>
-                            
+
                             {/* Driver State (EAR) */}
                             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Driver State</p>
@@ -553,7 +553,7 @@ const handleAlertResolved = () => {
                                 </span>
                               </p>
                             </div>
-                            
+
                             {/* Location */}
                             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Location</p>
@@ -561,7 +561,7 @@ const handleAlertResolved = () => {
                                 {gps ? `${gps[0].toFixed(4)}, ${gps[1].toFixed(4)}` : "N/A"}
                               </p>
                             </div>
-                            
+
                             {/* Last Updated */}
                             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Last Updated</p>
@@ -600,7 +600,7 @@ const handleAlertResolved = () => {
                 </section>
               )}
 
-              
+
 
               {/* Fleet Overview - Vehicle Cards */}
               {!selectedJeepneyId && (
@@ -611,7 +611,7 @@ const handleAlertResolved = () => {
                       const latestTelemetry = telemetryData?.find((t: Telemetry) => t.jeepneyId === jeepney._id);
                       const accel = latestTelemetry ? calculateAcceleration(latestTelemetry.accelX, latestTelemetry.accelY, latestTelemetry.accelZ) : 0;
                       const status = latestTelemetry ? determineStatus(latestTelemetry.earValue, accel) : "Unknown";
-                      
+
                       return (
                         <button
                           key={jeepney._id}
@@ -623,13 +623,12 @@ const handleAlertResolved = () => {
                               {jeepney.plateNumber}
                             </span>
                             <span
-                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                                status === "Normal"
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${status === "Normal"
                                   ? "bg-emerald-100 text-emerald-700"
                                   : status === "Monitoring"
-                                  ? "bg-blue-100 text-blue-700"
-                                  : "bg-amber-100 text-amber-700"
-                              }`}
+                                    ? "bg-blue-100 text-blue-700"
+                                    : "bg-amber-100 text-amber-700"
+                                }`}
                             >
                               {status}
                             </span>
@@ -660,44 +659,44 @@ const handleAlertResolved = () => {
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
-<thead>
-                           <tr className="border-b border-slate-200">
-                             <th className="px-3 py-2 text-left font-semibold text-slate-600">Time</th>
-                             <th className="px-3 py-2 text-left font-semibold text-slate-600">Jeepney</th>
-                             <th className="px-3 py-2 text-left font-semibold text-slate-600">EAR</th>
-                             <th className="px-3 py-2 text-left font-semibold text-slate-600">Speed</th>
-                             <th className="px-3 py-2 text-left font-semibold text-slate-600">Status</th>
-                           </tr>
-                         </thead>
+                        <thead>
+                          <tr className="border-b border-slate-200">
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Time</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Jeepney</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">EAR</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Speed</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Status</th>
+                          </tr>
+                        </thead>
                         <tbody>
-{telemetryRows.length > 0 ? (
-                             telemetryRows.map((row, idx) => (
-                               <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
-                                 <td className="px-3 py-2.5 font-mono text-slate-600">{row.time}</td>
-                                 <td className="px-3 py-2.5 font-semibold text-slate-900">{row.jeepney}</td>
-                                 <td className="px-3 py-2.5 text-slate-600">{row.ear}</td>
-                                 <td className="px-3 py-2.5 text-slate-600">{row.speed}</td>
-                                 <td className="px-3 py-2.5">
-                                   <span
-                                     className={`rounded-full px-2.5 py-1 text-xs font-medium ${row.status === "Normal"
-                                       ? "bg-emerald-100 text-emerald-700"
-                                       : row.status === "Monitoring"
-                                         ? "bg-blue-100 text-blue-700"
-                                         : "bg-amber-100 text-amber-700"
-                                       }`}
-                                   >
-                                     {row.status}
-                                   </span>
-                                 </td>
-                               </tr>
-                             ))
-                           ) : (
-                             <tr>
-                               <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
-                                 No telemetry data available yet
-                               </td>
-                             </tr>
-                           )}
+                          {telemetryRows.length > 0 ? (
+                            telemetryRows.map((row, idx) => (
+                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
+                                <td className="px-3 py-2.5 font-mono text-slate-600">{row.time}</td>
+                                <td className="px-3 py-2.5 font-semibold text-slate-900">{row.jeepney}</td>
+                                <td className="px-3 py-2.5 text-slate-600">{row.ear}</td>
+                                <td className="px-3 py-2.5 text-slate-600">{row.speed}</td>
+                                <td className="px-3 py-2.5">
+                                  <span
+                                    className={`rounded-full px-2.5 py-1 text-xs font-medium ${row.status === "Normal"
+                                      ? "bg-emerald-100 text-emerald-700"
+                                      : row.status === "Monitoring"
+                                        ? "bg-blue-100 text-blue-700"
+                                        : "bg-amber-100 text-amber-700"
+                                      }`}
+                                  >
+                                    {row.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                                No telemetry data available yet
+                              </td>
+                            </tr>
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -750,21 +749,21 @@ const handleAlertResolved = () => {
                 <LoadingSpinner />
               ) : (
                 <div className="relative z-0 h-[420px] w-full overflow-hidden rounded-xl border border-slate-300 bg-slate-100 sm:h-[500px]">
-<LiveMapView
-  telemetryData={telemetryData}
-  jeepneyData={jeepneyData}
-  calculateAcceleration={calculateAcceleration}
-  determineStatus={determineStatus}
-  parseGPS={parseGPS}
-  calculateSpeed={calculateSpeed}
-  jeepneyIcon={jeepneyIcon}
-/>
+                  <LiveMapView
+                    telemetryData={telemetryData}
+                    jeepneyData={jeepneyData}
+                    calculateAcceleration={calculateAcceleration}
+                    determineStatus={determineStatus}
+                    parseGPS={parseGPS}
+                    calculateSpeed={calculateSpeed}
+                    jeepneyIcon={jeepneyIcon}
+                  />
                 </div>
               )}
             </section>
           )}
 
-{activeTab === "alerts" && (
+          {activeTab === "alerts" && (
             <>
               {/* Modal for Vehicle Alert Details */}
               {selectedAlertJeepneyId && (
@@ -782,7 +781,7 @@ const handleAlertResolved = () => {
                         <X size={20} className="text-slate-500 hover:text-slate-700" />
                       </button>
                     </div>
-<div className="p-6 space-y-6">
+                    <div className="p-6 space-y-6">
                       <AlertsGallery
                         alerts={selectedVehicleAlerts || []}
                         isLoading={selectedVehicleAlertsLoading}
@@ -802,20 +801,18 @@ const handleAlertResolved = () => {
                             {selectedVehicleAlerts?.map((alert) => (
                               <div key={alert._id} className="p-3 rounded-lg border border-slate-200 bg-slate-50">
                                 <div className="flex items-center justify-between mb-2">
-                                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                                    alert.alertType === "DROWSY" 
-                                      ? "bg-red-100 text-red-700" 
+                                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${alert.alertType === "DROWSY"
+                                      ? "bg-red-100 text-red-700"
                                       : alert.alertType === "HARSH_BRAKING"
-                                      ? "bg-orange-100 text-orange-700"
-                                      : "bg-slate-100 text-slate-700"
-                                  }`}>
+                                        ? "bg-orange-100 text-orange-700"
+                                        : "bg-slate-100 text-slate-700"
+                                    }`}>
                                     {alert.alertType === "DROWSY" ? "DROWSY" : alert.alertType === "HARSH_BRAKING" ? "HARSH BRAKING" : alert.alertType}
                                   </span>
-                                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                                    alert.isResolved 
-                                      ? "bg-emerald-100 text-emerald-700" 
+                                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${alert.isResolved
+                                      ? "bg-emerald-100 text-emerald-700"
                                       : "bg-amber-100 text-amber-700"
-                                  }`}>
+                                    }`}>
                                     {alert.isResolved ? "Resolved" : "Active"}
                                   </span>
                                 </div>
@@ -868,11 +865,10 @@ const handleAlertResolved = () => {
                                 setSelectedAlertJeepneyId(vehicle.jeepneyId as any);
                                 setSelectedVehicleName(`${vehicle.plateNumber} - ${vehicle.driverName}`);
                               }}
-                              className={`relative overflow-hidden rounded-xl border border-amber-200 bg-white p-4 hover:border-amber-300 hover:shadow-md transition-all ${
-                                vehicle.activeAlerts > 0 && vehicle.drowsyAlerts > 0
+                              className={`relative overflow-hidden rounded-xl border border-amber-200 bg-white p-4 hover:border-amber-300 hover:shadow-md transition-all ${vehicle.activeAlerts > 0 && vehicle.drowsyAlerts > 0
                                   ? "border-red-300"
                                   : ""
-                              }`}
+                                }`}
                             >
                               <div className="mb-2 flex items-center justify-between">
                                 <div className="flex-1">
@@ -880,11 +876,10 @@ const handleAlertResolved = () => {
                                   <p className="mt-1 text-xs text-slate-500">{vehicle.driverName}</p>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                                    vehicle.activeAlerts > 0 
-                                      ? "bg-amber-100 text-amber-700" 
+                                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${vehicle.activeAlerts > 0
+                                      ? "bg-amber-100 text-amber-700"
                                       : "bg-emerald-100 text-emerald-700"
-                                  }`}>
+                                    }`}>
                                     {vehicle.activeAlerts} Active
                                   </span>
                                   {vehicle.drowsyAlerts > 0 && (
@@ -908,19 +903,19 @@ const handleAlertResolved = () => {
             </>
           )}
 
-            {activeTab === "health" && (
-               <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                 <h2 className="text-base font-semibold text-slate-800">System Health</h2>
-                 <p className="mt-2 text-sm text-slate-600">
-                   System health panel placeholder. Use Dashboard Overview for operational status cards.
-                 </p>
-               </section>
-             )}
-             
-           {activeTab === "users" && (
-             <UsersDirectory />
-           )}
-         </main>
+          {activeTab === "health" && (
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h2 className="text-base font-semibold text-slate-800">System Health</h2>
+              <p className="mt-2 text-sm text-slate-600">
+                System health panel placeholder. Use Dashboard Overview for operational status cards.
+              </p>
+            </section>
+          )}
+
+          {activeTab === "users" && (
+            <UsersDirectory />
+          )}
+        </main>
       </div>
 
       <style>{`

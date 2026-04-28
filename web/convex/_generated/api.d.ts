@@ -9,6 +9,7 @@
  */
 
 import type * as alerts from "../alerts.js";
+import type * as drivers from "../drivers.js";
 import type * as http from "../http.js";
 import type * as jeepneys from "../jeepneys.js";
 import type * as seed from "../seed.js";
@@ -23,6 +24,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   alerts: typeof alerts;
+  drivers: typeof drivers;
   http: typeof http;
   jeepneys: typeof jeepneys;
   seed: typeof seed;
