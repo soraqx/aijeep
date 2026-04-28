@@ -36,8 +36,16 @@ type Jeepney = {
   _id: string;
   _creationTime: number;
   plateNumber: string;
-  driverName: string;
   status: string;
+  driverName: string | null;
+  activeDriver?: {
+    _id: string;
+    _creationTime: number;
+    firstName: string;
+    lastName: string;
+    contactNumber?: string;
+    licenseNumber?: string;
+  } | null;
 };
 
 type Telemetry = {
@@ -260,7 +268,7 @@ export function DashboardPage() {
         vehiclesWithAlerts.push({
           jeepneyId,
           plateNumber: jeepney.plateNumber,
-          driverName: jeepney.driverName || null,
+          driverName: jeepney.driverName || "No Driver Assigned",
           activeAlerts,
           drowsyAlerts,
           lastAlertTimestamp
