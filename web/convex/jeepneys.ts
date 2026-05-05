@@ -38,3 +38,16 @@ export const assignDriver = mutation({
     return true;
   },
 });
+
+export const updateJeepneyStatus = mutation({
+  args: {
+    jeepneyId: v.id("jeepneys"),
+    newStatus: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const updated = await ctx.db.patch(args.jeepneyId, {
+      status: args.newStatus,
+    });
+    return updated;
+  },
+});

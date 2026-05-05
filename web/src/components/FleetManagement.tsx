@@ -155,21 +155,19 @@ export function FleetManagement() {
       <div className="mb-6 flex gap-2 border-b border-slate-200">
         <button
           onClick={() => setActiveTab("drivers")}
-          className={`px-4 py-3 font-medium transition border-b-2 ${
-            activeTab === "drivers"
+          className={`px-4 py-3 font-medium transition border-b-2 ${activeTab === "drivers"
               ? "border-blue-600 text-blue-600"
               : "border-transparent text-slate-600 hover:text-slate-900"
-          }`}
+            }`}
         >
           Drivers
         </button>
         <button
           onClick={() => setActiveTab("vehicles")}
-          className={`px-4 py-3 font-medium transition border-b-2 ${
-            activeTab === "vehicles"
+          className={`px-4 py-3 font-medium transition border-b-2 ${activeTab === "vehicles"
               ? "border-blue-600 text-blue-600"
               : "border-transparent text-slate-600 hover:text-slate-900"
-          }`}
+            }`}
         >
           Vehicles
         </button>
@@ -348,13 +346,12 @@ export function FleetManagement() {
                       <td className="px-4 py-3 font-medium text-slate-900">{jeepney.plateNumber}</td>
                       <td className="px-4 py-3">
                         <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                            jeepney.status === "active"
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${jeepney.status === "active"
                               ? "bg-emerald-100 text-emerald-700"
                               : jeepney.status === "idle"
                                 ? "bg-slate-100 text-slate-700"
                                 : "bg-red-100 text-red-700"
-                          }`}
+                            }`}
                         >
                           {jeepney.status.charAt(0).toUpperCase() + jeepney.status.slice(1)}
                         </span>
