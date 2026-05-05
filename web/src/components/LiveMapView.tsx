@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { LatLngTuple } from "leaflet";
 import L from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer, Polyline, useMap } from "react-leaflet";
-import { X } from "lucide-react";
+import { X, Map as MapIcon } from "lucide-react";
 
 // Types
 type Jeepney = {
@@ -69,14 +69,16 @@ const MALOLOS_TO_SJDM_ROUTE: LatLngTuple[] = [
 ];
 
 /**
- * Component to handle map centering and tracking behavior
+ * Component to handle map centering, tracking behavior, and dynamic center calculation
  */
 function MapController({
     selectedJeepneyId,
     selectedPosition,
+    dynamicCenter,
 }: {
     selectedJeepneyId: string | null;
     selectedPosition: LatLngTuple | null;
+    dynamicCenter: LatLngTuple | null;
 }) {
     const map = useMap();
 
@@ -87,8 +89,14 @@ function MapController({
                 duration: 1.5, // seconds for animation
                 easeLinearity: 0.25,
             });
+        } else if (dynamicCenter && !selectedJeepneyId) {
+            // If no vehicle is selected, center on the average position of active vehicles
+            map.flyTo(dynamicCenter, 13, {
+                duration: 1.5,
+                easeLinearity: 0.25,
+            });
         }
-    }, [map, selectedJeepneyId, selectedPosition]);
+    }, [map, selectedJeepneyId, selectedPosition, dynamicCenter]);
 
     return null;
 }
@@ -97,11 +105,12 @@ function MapController({
  * LiveMapView Component
  *
  * Displays a live map with:
- * - Static route line (Malolos to San Jose del Monte)
- * - Dynamic jeepney markers with real-time positions
- * - Driver status indicators
+ * - Static route line (Malolos to San Jose del Monte) with toggle control
+ * - Dynamic jeepney markers with real-time positions from telemetry data
+ * - Driver status indicators and vehicle info in popups
  * - Marker click selection with map recentering
  * - Tracking mode for selected vehicles
+ * - Dynamic centering on active vehicles or fallback to Metro Manila
  */
 export function LiveMapView({
     telemetryData,
@@ -113,6 +122,8 @@ export function LiveMapView({
     jeepneyIcon,
 }: LiveMapViewProps) {
     const [selectedJeepneyId, setSelectedJeepneyId] = useState<string | null>(null);
+    const [showRoute, setShowRoute] = useState<boolean>(false);
+    const [dynamicCenter, setDynamicCenter] = useState<LatLngTuple | null>(null);
     const jeepneyPositionsRef = useRef<Map<string, Telemetry>>(new Map());
     const jeepneyPreviousPositionsRef = useRef<Map<string, { gps: string; timestamp: number }>>(new Map());
     const mapRef = useRef<any>(null);
@@ -154,7 +165,30 @@ export function LiveMapView({
 
         jeepneyPositionsRef.current = positions;
         jeepneyPreviousPositionsRef.current = previousPositions;
-    }, [telemetryData]);
+
+        // Calculate dynamic center from active vehicles with valid GPS
+        const validPositions: LatLngTuple[] = [];
+        for (const telemetry of positions.values()) {
+            try {
+                const coords = parseGPS(telemetry.gps);
+                if (coords && coords[0] && coords[1] && !isNaN(coords[0]) && !isNaN(coords[1])) {
+                    validPositions.push(coords);
+                }
+            } catch {
+                // Skip invalid GPS coordinates
+            }
+        }
+
+        if (validPositions.length > 0) {
+            // Calculate average center of all active vehicles
+            const avgLat = validPositions.reduce((sum, pos) => sum + pos[0], 0) / validPositions.length;
+            const avgLng = validPositions.reduce((sum, pos) => sum + pos[1], 0) / validPositions.length;
+            setDynamicCenter([avgLat, avgLng]);
+        } else {
+            // Fallback to Metro Manila center if no active vehicles
+            setDynamicCenter(metroManilaCenter);
+        }
+    }, [telemetryData, parseGPS, metroManilaCenter]);
 
     // Get selected jeepney's current position for map centering
     const selectedPosition = selectedJeepneyId
@@ -172,7 +206,7 @@ export function LiveMapView({
     return (
         <div className="relative h-full w-full">
             <MapContainer
-                center={metroManilaCenter}
+                center={dynamicCenter || metroManilaCenter}
                 zoom={13}
                 scrollWheelZoom
                 className="h-full w-full"
@@ -183,45 +217,50 @@ export function LiveMapView({
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
 
-                {/* Static Route Line */}
-                <Polyline
-                    positions={MALOLOS_TO_SJDM_ROUTE}
-                    color="#3b82f6"
-                    weight={4}
-                    opacity={0.7}
-                    dashArray="8, 4"
-                    lineCap="round"
-                    lineJoin="round"
-                />
+                {/* Conditional Static Route Line & Markers */}
+                {showRoute && (
+                    <>
+                        <Polyline
+                            positions={MALOLOS_TO_SJDM_ROUTE}
+                            color="#3b82f6"
+                            weight={4}
+                            opacity={0.7}
+                            dashArray="8, 4"
+                            lineCap="round"
+                            lineJoin="round"
+                        />
 
-                {/* Route Start & End Markers */}
-                <Marker
-                    position={MALOLOS_TO_SJDM_ROUTE[0]}
-                    icon={L.icon({
-                        iconUrl: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxMGI5ODEiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCIvPjwvc3ZnPg==",
-                        iconSize: [32, 32],
-                        iconAnchor: [16, 16],
-                        popupAnchor: [0, -16],
-                    })}
-                >
-                    <Popup>
-                        <p className="font-semibold text-emerald-700">Route Start: Malolos</p>
-                    </Popup>
-                </Marker>
+                        {/* Route Start Marker */}
+                        <Marker
+                            position={MALOLOS_TO_SJDM_ROUTE[0]}
+                            icon={L.icon({
+                                iconUrl: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxMGI5ODEiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCIvPjwvc3ZnPg==",
+                                iconSize: [32, 32],
+                                iconAnchor: [16, 16],
+                                popupAnchor: [0, -16],
+                            })}
+                        >
+                            <Popup>
+                                <p className="font-semibold text-emerald-700">Route Start: Malolos</p>
+                            </Popup>
+                        </Marker>
 
-                <Marker
-                    position={MALOLOS_TO_SJDM_ROUTE[MALOLOS_TO_SJDM_ROUTE.length - 1]}
-                    icon={L.icon({
-                        iconUrl: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNlZjQ0NDQiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCIvPjwvc3ZnPg==",
-                        iconSize: [32, 32],
-                        iconAnchor: [16, 16],
-                        popupAnchor: [0, -16],
-                    })}
-                >
-                    <Popup>
-                        <p className="font-semibold text-red-700">Route End: San Jose del Monte</p>
-                    </Popup>
-                </Marker>
+                        {/* Route End Marker */}
+                        <Marker
+                            position={MALOLOS_TO_SJDM_ROUTE[MALOLOS_TO_SJDM_ROUTE.length - 1]}
+                            icon={L.icon({
+                                iconUrl: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNlZjQ0NDQiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCIvPjwvc3ZnPg==",
+                                iconSize: [32, 32],
+                                iconAnchor: [16, 16],
+                                popupAnchor: [0, -16],
+                            })}
+                        >
+                            <Popup>
+                                <p className="font-semibold text-red-700">Route End: San Jose del Monte</p>
+                            </Popup>
+                        </Marker>
+                    </>
+                )}
 
                 {/* Dynamic Jeepney Markers */}
                 {Array.from(jeepneyPositionsRef.current.values()).map((telemetry: Telemetry) => {
@@ -281,7 +320,11 @@ export function LiveMapView({
                 })}
 
                 {/* Map Controller for dynamic recentering */}
-                <MapController selectedJeepneyId={selectedJeepneyId} selectedPosition={selectedPosition} />
+                <MapController
+                    selectedJeepneyId={selectedJeepneyId}
+                    selectedPosition={selectedPosition}
+                    dynamicCenter={dynamicCenter}
+                />
             </MapContainer>
 
             {/* Selection Panel */}
@@ -350,6 +393,22 @@ export function LiveMapView({
                     <p className="mt-3 text-xs text-blue-600 italic">Map will center and track this vehicle</p>
                 </div>
             )}
+
+            {/* Route Toggle Button */}
+            <div className="absolute bottom-4 right-4 z-40 flex flex-col gap-2">
+                <button
+                    onClick={() => setShowRoute(!showRoute)}
+                    className={`flex items-center gap-2 rounded-lg px-4 py-3 font-semibold shadow-lg transition-all duration-200 ${showRoute
+                            ? "bg-blue-600 text-white hover:bg-blue-700"
+                            : "bg-white text-slate-700 border border-slate-200 hover:border-blue-400 hover:bg-slate-50"
+                        }`}
+                    aria-label="Toggle route visibility"
+                    title={showRoute ? "Hide route" : "Show route"}
+                >
+                    <MapIcon size={18} />
+                    <span>{showRoute ? "Hide Route" : "Show Route"}</span>
+                </button>
+            </div>
         </div>
     );
 }
