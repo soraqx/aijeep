@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { LatLngTuple } from "leaflet";
 import L from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer, Polyline, useMap } from "react-leaflet";
-import { X, Map as MapIcon } from "lucide-react";
+import { X, Map as MapIcon, Crosshair } from "lucide-react";
 
 // Types
 type Jeepney = {
@@ -69,16 +69,18 @@ const MALOLOS_TO_SJDM_ROUTE: LatLngTuple[] = [
 ];
 
 /**
- * Component to handle map centering, tracking behavior, and dynamic center calculation
+ * Component to handle vehicle tracking (when a vehicle is selected)
+ * This component ONLY recenters when the user explicitly selects a vehicle,
+ * not on every data update.
  */
 function MapController({
     selectedJeepneyId,
     selectedPosition,
-    dynamicCenter,
+    hasInitialCentered,
 }: {
     selectedJeepneyId: string | null;
     selectedPosition: LatLngTuple | null;
-    dynamicCenter: LatLngTuple | null;
+    hasInitialCentered: React.MutableRefObject<boolean>;
 }) {
     const map = useMap();
 
@@ -86,19 +88,62 @@ function MapController({
         if (selectedJeepneyId && selectedPosition) {
             // Fly to the selected jeepney with smooth animation
             map.flyTo(selectedPosition, 16, {
-                duration: 1.5, // seconds for animation
-                easeLinearity: 0.25,
-            });
-        } else if (dynamicCenter && !selectedJeepneyId) {
-            // If no vehicle is selected, center on the average position of active vehicles
-            map.flyTo(dynamicCenter, 13, {
                 duration: 1.5,
                 easeLinearity: 0.25,
             });
         }
-    }, [map, selectedJeepneyId, selectedPosition, dynamicCenter]);
+    }, [map, selectedJeepneyId, selectedPosition]);
 
     return null;
+}
+
+/**
+ * Component to handle map controls (recenter button)
+ * This allows users to manually recenter the map to see all vehicles
+ */
+function MapControls({
+    jeepneyPositionsRef,
+    parseGPS,
+}: {
+    jeepneyPositionsRef: React.MutableRefObject<Map<string, Telemetry>>;
+    parseGPS: (gpsString: string) => LatLngTuple;
+}) {
+    const map = useMap();
+
+    const handleRecenter = () => {
+        const positions = Array.from(jeepneyPositionsRef.current.values());
+
+        // Collect all valid GPS coordinates
+        const validCoords: LatLngTuple[] = [];
+        for (const telemetry of positions) {
+            try {
+                const coords = parseGPS(telemetry.gps);
+                if (coords && coords[0] && coords[1] && !isNaN(coords[0]) && !isNaN(coords[1])) {
+                    validCoords.push(coords);
+                }
+            } catch {
+                // Skip invalid GPS
+            }
+        }
+
+        if (validCoords.length === 0) return;
+
+        // Create bounds from valid coordinates
+        const bounds = L.latLngBounds(validCoords);
+        map.fitBounds(bounds, { padding: [50, 50] });
+    };
+
+    return (
+        <button
+            onClick={handleRecenter}
+            className="flex items-center gap-2 rounded-lg bg-white px-4 py-3 text-slate-700 border border-slate-200 hover:border-blue-400 hover:bg-slate-50 shadow-lg transition-all duration-200 font-semibold"
+            aria-label="Recenter map to fit all vehicles"
+            title="Recenter map to fit all vehicles"
+        >
+            <Crosshair size={18} />
+            <span>Recenter</span>
+        </button>
+    );
 }
 
 /**
@@ -108,9 +153,9 @@ function MapController({
  * - Static route line (Malolos to San Jose del Monte) with toggle control
  * - Dynamic jeepney markers with real-time positions from telemetry data
  * - Driver status indicators and vehicle info in popups
- * - Marker click selection with map recentering
- * - Tracking mode for selected vehicles
- * - Dynamic centering on active vehicles or fallback to Metro Manila
+ * - Marker click selection with manual tracking
+ * - Recenter button to fit all vehicles in view
+ * - Non-intrusive: map does NOT auto-recenter on data updates
  */
 export function LiveMapView({
     telemetryData,
@@ -123,9 +168,9 @@ export function LiveMapView({
 }: LiveMapViewProps) {
     const [selectedJeepneyId, setSelectedJeepneyId] = useState<string | null>(null);
     const [showRoute, setShowRoute] = useState<boolean>(false);
-    const [dynamicCenter, setDynamicCenter] = useState<LatLngTuple | null>(null);
     const jeepneyPositionsRef = useRef<Map<string, Telemetry>>(new Map());
     const jeepneyPreviousPositionsRef = useRef<Map<string, { gps: string; timestamp: number }>>(new Map());
+    const hasInitialCentered = useRef<boolean>(false);
     const mapRef = useRef<any>(null);
 
     const metroManilaCenter: LatLngTuple = [14.5995, 120.9842];
@@ -166,29 +211,28 @@ export function LiveMapView({
         jeepneyPositionsRef.current = positions;
         jeepneyPreviousPositionsRef.current = previousPositions;
 
-        // Calculate dynamic center from active vehicles with valid GPS
-        const validPositions: LatLngTuple[] = [];
-        for (const telemetry of positions.values()) {
-            try {
-                const coords = parseGPS(telemetry.gps);
-                if (coords && coords[0] && coords[1] && !isNaN(coords[0]) && !isNaN(coords[1])) {
-                    validPositions.push(coords);
+        // On first load with valid GPS data, perform initial centering only once
+        if (!hasInitialCentered.current && mapRef.current) {
+            const validPositions: LatLngTuple[] = [];
+            for (const telemetry of positions.values()) {
+                try {
+                    const coords = parseGPS(telemetry.gps);
+                    if (coords && coords[0] && coords[1] && !isNaN(coords[0]) && !isNaN(coords[1])) {
+                        validPositions.push(coords);
+                    }
+                } catch {
+                    // Skip invalid GPS
                 }
-            } catch {
-                // Skip invalid GPS coordinates
+            }
+
+            if (validPositions.length > 0) {
+                hasInitialCentered.current = true;
+                // Center on first valid vehicle position
+                const bounds = L.latLngBounds(validPositions);
+                mapRef.current.fitBounds(bounds, { padding: [50, 50] });
             }
         }
-
-        if (validPositions.length > 0) {
-            // Calculate average center of all active vehicles
-            const avgLat = validPositions.reduce((sum, pos) => sum + pos[0], 0) / validPositions.length;
-            const avgLng = validPositions.reduce((sum, pos) => sum + pos[1], 0) / validPositions.length;
-            setDynamicCenter([avgLat, avgLng]);
-        } else {
-            // Fallback to Metro Manila center if no active vehicles
-            setDynamicCenter(metroManilaCenter);
-        }
-    }, [telemetryData, parseGPS, metroManilaCenter]);
+    }, [telemetryData, parseGPS]);
 
     // Get selected jeepney's current position for map centering
     const selectedPosition = selectedJeepneyId
@@ -206,7 +250,7 @@ export function LiveMapView({
     return (
         <div className="relative h-full w-full">
             <MapContainer
-                center={dynamicCenter || metroManilaCenter}
+                center={metroManilaCenter}
                 zoom={13}
                 scrollWheelZoom
                 className="h-full w-full"
@@ -319,11 +363,17 @@ export function LiveMapView({
                     );
                 })}
 
-                {/* Map Controller for dynamic recentering */}
+                {/* Map Controller for vehicle tracking */}
                 <MapController
                     selectedJeepneyId={selectedJeepneyId}
                     selectedPosition={selectedPosition}
-                    dynamicCenter={dynamicCenter}
+                    hasInitialCentered={hasInitialCentered}
+                />
+
+                {/* Map Controls (Recenter button) */}
+                <MapControls
+                    jeepneyPositionsRef={jeepneyPositionsRef}
+                    parseGPS={parseGPS}
                 />
             </MapContainer>
 
@@ -394,13 +444,13 @@ export function LiveMapView({
                 </div>
             )}
 
-            {/* Route Toggle Button */}
-            <div className="absolute bottom-4 right-4 z-40 flex flex-col gap-2">
+            {/* Control Buttons */}
+            <div className="absolute bottom-4 right-4 z-40 flex flex-col gap-3">
                 <button
                     onClick={() => setShowRoute(!showRoute)}
                     className={`flex items-center gap-2 rounded-lg px-4 py-3 font-semibold shadow-lg transition-all duration-200 ${showRoute
-                            ? "bg-blue-600 text-white hover:bg-blue-700"
-                            : "bg-white text-slate-700 border border-slate-200 hover:border-blue-400 hover:bg-slate-50"
+                        ? "bg-blue-600 text-white hover:bg-blue-700"
+                        : "bg-white text-slate-700 border border-slate-200 hover:border-blue-400 hover:bg-slate-50"
                         }`}
                     aria-label="Toggle route visibility"
                     title={showRoute ? "Hide route" : "Show route"}
