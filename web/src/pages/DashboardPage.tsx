@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Bus,
   ChevronRight,
+  Download,
   LayoutDashboard,
   MapPinned,
   Menu,
@@ -29,7 +30,9 @@ import { UsersDirectory } from "../components/UsersDirectory";
 import { LiveMapView } from "../components/LiveMapView";
 import { EmergencyBadge } from "../components/EmergencyBadge";
 import { AlertsGallery } from "../components/AlertsGallery";
+import { FleetManagement } from "../components/FleetManagement";
 import { haversineDistance, calculateSpeed, parseGPS } from "../utils/telemetryUtils";
+import { exportToCSV } from "../utils/csvExport";
 
 // Types matching Convex schema
 type Jeepney = {
@@ -135,7 +138,7 @@ function NavItem({ label, icon, active = false, onClick }: NavItemProps) {
   );
 }
 
-type DashboardTab = "overview" | "live-map" | "alerts" | "health" | "users";
+type DashboardTab = "overview" | "live-map" | "alerts" | "health" | "users" | "fleet";
 
 /**
  * LoadingSpinner component for rendering a centered loading indicator.
@@ -297,39 +300,6 @@ export function DashboardPage() {
     setTimeout(() => setSelectedAlertJeepneyId(currentId), 50);
   };
 
-  const exportToCSV = () => {
-    if (!sevenDayReport || !Array.isArray(sevenDayReport)) return;
-
-    const headers = ["Date", "Time", "Plate Number", "Driver Name", "Alert Type", "Status"];
-    const rows = sevenDayReport.map((alert: any) => [
-      alert.date,
-      alert.time,
-      alert.plateNumber || "Unknown",
-      alert.driverName || "Unknown",
-      alert.alertType,
-      alert.isResolved ? "Resolved" : "Active"
-    ]);
-
-    const csvContent = [
-      headers,
-      ...rows
-    ]
-      .map((row: any[]) => row.map((field: any) => `"${field}"`).join(","))
-      .join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `alerts-7day-report-${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-
-
   // Count metrics
   const activeJeepneyCount = jeepneyData?.length || 0;
   const alertCount = (alertData as any[])?.filter((a: any) => !a.isResolved).length || 0;
@@ -434,6 +404,12 @@ export function DashboardPage() {
               icon={<Users size={16} />}
               active={activeTab === "users"}
               onClick={() => onTabChange("users")}
+            />
+            <NavItem
+              label="Fleet & Drivers"
+              icon={<Bus size={16} />}
+              active={activeTab === "fleet"}
+              onClick={() => onTabChange("fleet")}
             />
           </nav>
 
@@ -805,6 +781,26 @@ export function DashboardPage() {
 
           {activeTab === "alerts" && (
             <>
+              {/* Download 7-Day Report Button */}
+              <div className="mb-4 flex justify-end">
+                <button
+                  onClick={() => {
+                    if (sevenDayReport && Array.isArray(sevenDayReport)) {
+                      exportToCSV(
+                        sevenDayReport,
+                        `alerts-7day-report-${new Date().toISOString().split('T')[0]}.csv`
+                      );
+                    } else {
+                      alert("No data available for export");
+                    }
+                  }}
+                  className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white hover:bg-emerald-700 transition"
+                >
+                  <Download size={16} />
+                  Download 7-Day Report
+                </button>
+              </div>
+
               {/* Modal for Vehicle Alert Details */}
               {selectedAlertJeepneyId && (
                 <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center">
@@ -954,6 +950,13 @@ export function DashboardPage() {
 
           {activeTab === "users" && (
             <UsersDirectory />
+          )}
+
+          {activeTab === "fleet" && (
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h2 className="mb-6 text-base font-semibold text-slate-800">Fleet & Drivers Management</h2>
+              <FleetManagement />
+            </section>
           )}
         </main>
       </div>
