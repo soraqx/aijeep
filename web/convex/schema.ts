@@ -13,6 +13,7 @@ export default defineSchema({
     plateNumber: v.string(),
     activeDriverId: v.optional(v.id("drivers")),
     status: v.string(),
+    driverName: v.optional(v.string()), // Stores driver name, also computed in queries
   })
     .index("by_plateNumber", ["plateNumber"])
     .index("by_activeDriverId", ["activeDriverId"]),
