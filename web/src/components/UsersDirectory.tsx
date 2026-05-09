@@ -47,10 +47,12 @@ export function UsersDirectory() {
     try {
       await updateRole({ userId, newRole });
       setStatusMessage("Role updated successfully");
-      window.setTimeout(() => setStatusMessage(""), 2000);
-    } catch (error) {
+      window.setTimeout(() => setStatusMessage(""), 3000);
+    } catch (error: any) {
       console.error("Failed to update role:", error);
-      setStatusMessage("Update failed. Please try again.");
+      // Extract error message from ConvexError or generic Error
+      const errorMessage = error?.message || error?.data?.message || "Update failed. Please try again.";
+      setStatusMessage(errorMessage);
     } finally {
       setUpdatingUserId(null);
     }
@@ -84,10 +86,12 @@ export function UsersDirectory() {
       await updateRole({ userId: editingUser._id, newRole: editingRole });
       setStatusMessage("Role updated successfully");
       handleCloseEditModal();
-      window.setTimeout(() => setStatusMessage(""), 2000);
-    } catch (error) {
+      window.setTimeout(() => setStatusMessage(""), 3000);
+    } catch (error: any) {
       console.error("Failed to update role:", error);
-      setStatusMessage("Update failed. Please try again.");
+      // Extract error message from ConvexError or generic Error
+      const errorMessage = error?.message || error?.data?.message || "Update failed. Please try again.";
+      setStatusMessage(errorMessage);
     } finally {
       setEditSubmitting(false);
     }
@@ -118,10 +122,12 @@ export function UsersDirectory() {
       await deleteUserMutation({ userId: deletingUserId! });
       setStatusMessage("User deleted successfully");
       setDeletingUserId(null);
-      window.setTimeout(() => setStatusMessage(""), 2000);
-    } catch (error) {
+      window.setTimeout(() => setStatusMessage(""), 3000);
+    } catch (error: any) {
       console.error("Failed to delete user:", error);
-      setStatusMessage("Delete failed. Please try again.");
+      // Extract error message from ConvexError or generic Error
+      const errorMessage = error?.message || error?.data?.message || "Delete failed. Please try again.";
+      setStatusMessage(errorMessage);
       setDeletingUserId(null);
     } finally {
       setDeleteSubmitting(false);
