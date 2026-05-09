@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { ChevronDown, Loader, Plus, X } from "lucide-react";
+import { ChevronDown, Loader, Plus, X, Edit, Trash2 } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 
 /**
@@ -48,8 +48,8 @@ const INITIAL_FORM_STATE: AddDriverFormData = {
  * FleetManagement Component
  *
  * Displays two tabs: Drivers and Vehicles
- * - Drivers Tab: Table of all drivers with ability to add new drivers
- * - Vehicles Tab: Table of all jeepneys with ability to assign drivers via dropdown
+ * - Drivers Tab: Table of all drivers with ability to add, edit, and delete drivers
+ * - Vehicles Tab: Table of all jeepneys with ability to assign/unassign drivers via dropdown
  */
 export function FleetManagement() {
   const [activeTab, setActiveTab] = useState<FleetTabType>("drivers");
@@ -58,12 +58,20 @@ export function FleetManagement() {
   const [formErrors, setFormErrors] = useState<Partial<AddDriverFormData>>({});
   const [submitting, setSubmitting] = useState(false);
 
+  // Edit modal state
+  const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
+  const [editFormData, setEditFormData] = useState<AddDriverFormData>(INITIAL_FORM_STATE);
+  const [editFormErrors, setEditFormErrors] = useState<Partial<AddDriverFormData>>({});
+  const [editSubmitting, setEditSubmitting] = useState(false);
+
   // Fetch data from Convex
   const drivers = useQuery(api.drivers.getAll, {});
   const jeepneys = useQuery(api.jeepneys.getAll, {});
 
   // Mutations
   const createDriver = useMutation(api.drivers.createDriver);
+  const updateDriver = useMutation(api.drivers.updateDriver);
+  const deleteDriver = useMutation(api.drivers.deleteDriver);
   const assignDriver = useMutation(api.jeepneys.assignDriver);
 
   const [assigningJeepneyId, setAssigningJeepneyId] = useState<string | null>(null);
@@ -116,18 +124,128 @@ export function FleetManagement() {
   /**
    * Handle driver assignment for a vehicle
    */
-  const handleAssignDriver = async (jeepneyId: string, driverId: string) => {
+  const handleAssignDriver = async (
+    jeepneyId: string,
+    driverId: string | null
+  ) => {
     setAssigningJeepneyId(jeepneyId);
     try {
       await assignDriver({
         jeepneyId: jeepneyId as any,
-        driverId: driverId as any,
+        driverId: driverId ? (driverId as any) : null,
       });
     } catch (error) {
       console.error("Failed to assign driver:", error);
       alert("Failed to assign driver. Please try again.");
     } finally {
       setAssigningJeepneyId(null);
+    }
+  };
+
+  /**
+   * Open edit modal with driver data
+   */
+  const handleEditDriver = (driver: Driver) => {
+    setEditingDriver(driver);
+    setEditFormData({
+      firstName: driver.firstName,
+      lastName: driver.lastName,
+      contactNumber: driver.contactNumber || "",
+      licenseNumber: driver.licenseNumber || "",
+    });
+    setEditFormErrors({});
+  };
+
+  /**
+   * Close edit modal
+   */
+  const handleCloseEditModal = () => {
+    setEditingDriver(null);
+    setEditFormData(INITIAL_FORM_STATE);
+    setEditFormErrors({});
+  };
+
+  /**
+   * Validate edit driver form
+   */
+  const validateEditForm = (): boolean => {
+    const errors: Partial<AddDriverFormData> = {};
+
+    if (!editFormData.firstName.trim()) {
+      errors.firstName = "First name is required";
+    }
+    if (!editFormData.lastName.trim()) {
+      errors.lastName = "Last name is required";
+    }
+
+    setEditFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  /**
+   * Handle edit driver form submission
+   */
+  const handleEditDriverSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!editingDriver || !validateEditForm()) return;
+
+    setEditSubmitting(true);
+    try {
+      await updateDriver({
+        driverId: editingDriver._id as any,
+        firstName: editFormData.firstName.trim(),
+        lastName: editFormData.lastName.trim(),
+        contactNumber: editFormData.contactNumber.trim() || undefined,
+        licenseNumber: editFormData.licenseNumber.trim() || undefined,
+      });
+
+      handleCloseEditModal();
+    } catch (error) {
+      console.error("Failed to update driver:", error);
+      alert("Failed to update driver. Please try again.");
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
+  /**
+   * Handle delete driver with confirmation
+   */
+  const handleDeleteDriver = async (driver: Driver) => {
+    if (
+      !window.confirm(
+        `Are you sure you want to delete ${driver.firstName} ${driver.lastName}? This driver will be unassigned from any vehicles.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await deleteDriver({
+        driverId: driver._id as any,
+      });
+    } catch (error) {
+      console.error("Failed to delete driver:", error);
+      alert("Failed to delete driver. Please try again.");
+    }
+  };
+
+  /**
+   * Update edit form field
+   */
+  const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setEditFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+    // Clear error for this field when user starts typing
+    if (editFormErrors[name as keyof AddDriverFormData]) {
+      setEditFormErrors((prev) => ({
+        ...prev,
+        [name]: undefined,
+      }));
     }
   };
 
@@ -156,8 +274,8 @@ export function FleetManagement() {
         <button
           onClick={() => setActiveTab("drivers")}
           className={`px-4 py-3 font-medium transition border-b-2 ${activeTab === "drivers"
-              ? "border-blue-600 text-blue-600"
-              : "border-transparent text-slate-600 hover:text-slate-900"
+            ? "border-blue-600 text-blue-600"
+            : "border-transparent text-slate-600 hover:text-slate-900"
             }`}
         >
           Drivers
@@ -165,8 +283,8 @@ export function FleetManagement() {
         <button
           onClick={() => setActiveTab("vehicles")}
           className={`px-4 py-3 font-medium transition border-b-2 ${activeTab === "vehicles"
-              ? "border-blue-600 text-blue-600"
-              : "border-transparent text-slate-600 hover:text-slate-900"
+            ? "border-blue-600 text-blue-600"
+            : "border-transparent text-slate-600 hover:text-slate-900"
             }`}
         >
           Vehicles
@@ -295,6 +413,7 @@ export function FleetManagement() {
                     <th className="px-4 py-3 text-left font-semibold text-slate-700">Name</th>
                     <th className="px-4 py-3 text-left font-semibold text-slate-700">Contact</th>
                     <th className="px-4 py-3 text-left font-semibold text-slate-700">License</th>
+                    <th className="px-4 py-3 text-center font-semibold text-slate-700">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -309,6 +428,24 @@ export function FleetManagement() {
                       <td className="px-4 py-3 text-slate-600">
                         {driver.licenseNumber || <span className="text-slate-400">—</span>}
                       </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => handleEditDriver(driver)}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-100 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-200 transition"
+                          >
+                            <Edit size={14} />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteDriver(driver)}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-red-100 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-200 transition"
+                          >
+                            <Trash2 size={14} />
+                            Delete
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -319,6 +456,107 @@ export function FleetManagement() {
               <p className="text-sm text-slate-600">No drivers found. Click "Add Driver" to create one.</p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* EDIT DRIVER MODAL */}
+      {editingDriver && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white shadow-lg">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-slate-900">Edit Driver</h2>
+              <button
+                onClick={handleCloseEditModal}
+                className="text-slate-400 hover:text-slate-600 transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditDriverSubmit} className="space-y-4 p-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    First Name *
+                  </label>
+                  <input
+                    type="text"
+                    name="firstName"
+                    value={editFormData.firstName}
+                    onChange={handleEditFormChange}
+                    placeholder="John"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  {editFormErrors.firstName && (
+                    <p className="mt-1 text-xs text-red-600">{editFormErrors.firstName}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Last Name *
+                  </label>
+                  <input
+                    type="text"
+                    name="lastName"
+                    value={editFormData.lastName}
+                    onChange={handleEditFormChange}
+                    placeholder="Doe"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  {editFormErrors.lastName && (
+                    <p className="mt-1 text-xs text-red-600">{editFormErrors.lastName}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Contact Number
+                  </label>
+                  <input
+                    type="tel"
+                    name="contactNumber"
+                    value={editFormData.contactNumber}
+                    onChange={handleEditFormChange}
+                    placeholder="+63 9xx xxx xxxx"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    License Number
+                  </label>
+                  <input
+                    type="text"
+                    name="licenseNumber"
+                    value={editFormData.licenseNumber}
+                    onChange={handleEditFormChange}
+                    placeholder="DL12345678"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <button
+                  type="button"
+                  onClick={handleCloseEditModal}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSubmitting}
+                  className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {editSubmitting && <Loader size={14} className="animate-spin" />}
+                  {editSubmitting ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -347,10 +585,10 @@ export function FleetManagement() {
                       <td className="px-4 py-3">
                         <span
                           className={`rounded-full px-2.5 py-1 text-xs font-medium ${jeepney.status === "active"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : jeepney.status === "idle"
-                                ? "bg-slate-100 text-slate-700"
-                                : "bg-red-100 text-red-700"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : jeepney.status === "idle"
+                              ? "bg-slate-100 text-slate-700"
+                              : "bg-red-100 text-red-700"
                             }`}
                         >
                           {jeepney.status.charAt(0).toUpperCase() + jeepney.status.slice(1)}
@@ -361,9 +599,10 @@ export function FleetManagement() {
                           <select
                             value={jeepney.activeDriverId || ""}
                             onChange={(e) => {
-                              if (e.target.value) {
-                                handleAssignDriver(jeepney._id, e.target.value);
-                              }
+                              handleAssignDriver(
+                                jeepney._id,
+                                e.target.value || null
+                              );
                             }}
                             disabled={assigningJeepneyId === jeepney._id}
                             className="w-full appearance-none rounded-lg border border-slate-300 bg-white px-3 py-2 pr-8 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition"

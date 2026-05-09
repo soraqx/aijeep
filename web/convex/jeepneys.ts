@@ -29,11 +29,30 @@ export const getAll = getJeepneys;
 export const assignDriver = mutation({
   args: {
     jeepneyId: v.id("jeepneys"),
-    driverId: v.id("drivers"),
+    driverId: v.optional(v.union(v.id("drivers"), v.null())),
   },
   handler: async (ctx, args) => {
+    // If assigning a valid driver, enforce 1:1 relationship
+    if (args.driverId) {
+      // Find any other jeepney currently assigned to this driver
+      const existingJeepneys = await ctx.db
+        .query("jeepneys")
+        .filter((q) => q.eq(q.field("activeDriverId"), args.driverId))
+        .collect();
+
+      // Unassign the driver from any other jeepney
+      for (const jeepney of existingJeepneys) {
+        if (jeepney._id !== args.jeepneyId) {
+          await ctx.db.patch(jeepney._id, {
+            activeDriverId: null,
+          });
+        }
+      }
+    }
+
+    // Assign (or unassign if null) the driver to the target jeepney
     await ctx.db.patch(args.jeepneyId, {
-      activeDriverId: args.driverId,
+      activeDriverId: args.driverId || null,
     });
     return true;
   },

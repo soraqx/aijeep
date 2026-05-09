@@ -53,6 +53,20 @@ export const deleteDriver = mutation({
         driverId: v.id("drivers"),
     },
     handler: async (ctx, args) => {
+        // Before deleting the driver, unassign them from any jeepney
+        const jeepneysWithDriver = await ctx.db
+            .query("jeepneys")
+            .filter((q) => q.eq(q.field("activeDriverId"), args.driverId))
+            .collect();
+
+        // Unassign the driver from all jeepneys
+        for (const jeepney of jeepneysWithDriver) {
+            await ctx.db.patch(jeepney._id, {
+                activeDriverId: null,
+            });
+        }
+
+        // Now delete the driver
         await ctx.db.delete(args.driverId);
         return true;
     },
