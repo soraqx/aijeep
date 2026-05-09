@@ -70,6 +70,29 @@ export const updateUserRole = mutation({
   },
 });
 
+export const deleteUser = mutation({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const currentUser = await getCurrentUserFromIdentity(ctx);
+    if (!currentUser) {
+      throw new Error("Unauthorized: authentication required");
+    }
+    if (currentUser.role !== "admin") {
+      throw new Error("Unauthorized: admin role required");
+    }
+
+    // Prevent admin from deleting themselves
+    if (currentUser._id === args.userId) {
+      throw new Error("Cannot delete your own user account");
+    }
+
+    await ctx.db.delete(args.userId);
+    return true;
+  },
+});
+
 // Internal mutation to create/update user from Clerk webhook
 export const createUser = internalMutation({
   args: {
