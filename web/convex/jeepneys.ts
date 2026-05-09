@@ -29,7 +29,7 @@ export const getAll = getJeepneys;
 export const assignDriver = mutation({
   args: {
     jeepneyId: v.id("jeepneys"),
-    driverId: v.optional(v.union(v.id("drivers"), v.null())),
+    driverId: v.optional(v.id("drivers")),
   },
   handler: async (ctx, args) => {
     // If assigning a valid driver, enforce 1:1 relationship
