@@ -54,19 +54,32 @@ export const updateUserRole = mutation({
     newRole: v.string(),
   },
   handler: async (ctx, args) => {
-    const currentUser = await getCurrentUserFromIdentity(ctx);
-    if (!currentUser) {
-      throw new Error("Unauthorized: authentication required");
-    }
-    if (currentUser.role !== "admin") {
-      throw new Error("Unauthorized: admin role required");
-    }
+    try {
+      const currentUser = await getCurrentUserFromIdentity(ctx);
+      if (!currentUser) {
+        throw new Error("Unauthorized: authentication required");
+      }
+      if (currentUser.role !== "admin") {
+        throw new Error("Unauthorized: admin role required");
+      }
 
-    if (!["admin", "guest", "pending"].includes(args.newRole)) {
-      throw new Error("Invalid role");
-    }
+      if (!["admin", "guest", "pending"].includes(args.newRole)) {
+        throw new Error("Invalid role");
+      }
 
-    await ctx.db.patch(args.userId, { role: args.newRole });
+      // Verify the user exists before patching
+      const userToUpdate = await ctx.db.get(args.userId);
+      if (!userToUpdate) {
+        throw new Error("User not found");
+      }
+
+      await ctx.db.patch(args.userId, { role: args.newRole });
+      console.log("[Users] User role updated:", args.userId, "->", args.newRole);
+      return true;
+    } catch (error) {
+      console.error("[Users] Update user role error:", error);
+      throw error;
+    }
   },
 });
 
@@ -75,21 +88,33 @@ export const deleteUser = mutation({
     userId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    const currentUser = await getCurrentUserFromIdentity(ctx);
-    if (!currentUser) {
-      throw new Error("Unauthorized: authentication required");
-    }
-    if (currentUser.role !== "admin") {
-      throw new Error("Unauthorized: admin role required");
-    }
+    try {
+      const currentUser = await getCurrentUserFromIdentity(ctx);
+      if (!currentUser) {
+        throw new Error("Unauthorized: authentication required");
+      }
+      if (currentUser.role !== "admin") {
+        throw new Error("Unauthorized: admin role required");
+      }
 
-    // Prevent admin from deleting themselves
-    if (currentUser._id === args.userId) {
-      throw new Error("Cannot delete your own user account");
-    }
+      // Prevent admin from deleting themselves
+      if (currentUser._id === args.userId) {
+        throw new Error("Cannot delete your own user account");
+      }
 
-    await ctx.db.delete(args.userId);
-    return true;
+      // Verify the user exists before deletion
+      const userToDelete = await ctx.db.get(args.userId);
+      if (!userToDelete) {
+        throw new Error("User not found");
+      }
+
+      await ctx.db.delete(args.userId);
+      console.log("[Users] User deleted successfully:", args.userId);
+      return true;
+    } catch (error) {
+      console.error("[Users] Delete user error:", error);
+      throw error;
+    }
   },
 });
 
