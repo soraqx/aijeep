@@ -62,7 +62,7 @@ export const deleteDriver = mutation({
         // Unassign the driver from all jeepneys
         for (const jeepney of jeepneysWithDriver) {
             await ctx.db.patch(jeepney._id, {
-                activeDriverId: null,
+                activeDriverId: undefined,
             });
         }
 

@@ -44,15 +44,15 @@ export const assignDriver = mutation({
       for (const jeepney of existingJeepneys) {
         if (jeepney._id !== args.jeepneyId) {
           await ctx.db.patch(jeepney._id, {
-            activeDriverId: null,
+            activeDriverId: undefined,
           });
         }
       }
     }
 
-    // Assign (or unassign if null) the driver to the target jeepney
+    // Assign (or unassign if undefined) the driver to the target jeepney
     await ctx.db.patch(args.jeepneyId, {
-      activeDriverId: args.driverId || null,
+      activeDriverId: args.driverId,
     });
     return true;
   },
