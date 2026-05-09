@@ -115,7 +115,7 @@ export function UsersDirectory() {
     setDeleteSubmitting(true);
     setStatusMessage("");
     try {
-      await deleteUserMutation({ userId: deletingUserId });
+      await deleteUserMutation({ userId: deletingUserId! });
       setStatusMessage("User deleted successfully");
       setDeletingUserId(null);
       window.setTimeout(() => setStatusMessage(""), 2000);
@@ -216,7 +216,7 @@ export function UsersDirectory() {
                         <span className="hidden sm:inline">Edit</span>
                       </button>
                       <button
-                        onClick={() => handleConfirmDelete(user._id)}
+                        onClick={() => handleConfirmDelete(user._id!)}
                         disabled={currentUser?._id === user._id}
                         className="inline-flex items-center gap-1 rounded-lg bg-red-100 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
                         title={currentUser?._id === user._id ? "Cannot delete yourself" : "Delete user"}
