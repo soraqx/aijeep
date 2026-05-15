@@ -42,7 +42,17 @@ http.route({
       const payload = await request.json();
 
       // Validate required fields from Python edge script
-      if (!payload.jeepney_id || !payload.lat || !payload.lon || payload.timestamp === undefined) {
+      // NOTE: Use explicit undefined/null checks, not falsy checks (lat/lon can be 0!)
+      if (
+        payload.jeepney_id === undefined ||
+        payload.jeepney_id === null ||
+        payload.lat === undefined ||
+        payload.lat === null ||
+        payload.lon === undefined ||
+        payload.lon === null ||
+        payload.timestamp === undefined ||
+        payload.timestamp === null
+      ) {
         return jsonResponse(
           {
             success: false,

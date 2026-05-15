@@ -90,10 +90,14 @@ class ESP32Reader(threading.Thread):
                 line = self.ser.readline().decode('utf-8', errors='ignore').strip()
                 if line:
                     data = json.loads(line)
-                    with self.lock:
-                        self.latest_data = data
-            except Exception:
-                pass 
+                    # Only store valid dict data (not raw numbers or other types)
+                    if isinstance(data, dict):
+                        with self.lock:
+                            self.latest_data = data
+                    else:
+                        print(f"[Hardware Warning] Received non-dict data from ESP32: {type(data).__name__} = {data}")
+            except Exception as e:
+                print(f"[Hardware Error] JSON parse failed: {e}") 
 
     def get_latest(self):
         with self.lock:
@@ -117,9 +121,15 @@ def telemetry_worker():
         try:
             req = urllib.request.Request(TELEMETRY_URL, data=json.dumps(payload).encode('utf-8'),
                                          headers={'Content-Type': 'application/json'})
-            urllib.request.urlopen(req, timeout=3.0)
-        except Exception:
-            pass
+            response = urllib.request.urlopen(req, timeout=3.0)
+            response_body = response.read().decode('utf-8')
+            print(f"[Network] Telemetry sent: {response.status} - {response_body}")
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode('utf-8')
+            print(f"[Network Error] HTTP {e.code} - {error_body}")
+            print(f"[Network Debug] Payload: {json.dumps(payload)}")
+        except Exception as e:
+            print(f"[Network Error] {type(e).__name__}: {e}")
         telemetry_queue.task_done()
 
 def snapshot_worker():
@@ -216,7 +226,7 @@ def main():
             # 1. KINEMATIC AI PIPELINE 
             # ----------------------------------------
             latest_physics = esp32_thread.get_latest()
-            if latest_physics:
+            if latest_physics and isinstance(latest_physics, dict):
                 accel_y = latest_physics.get('accel_y', 0)
                 speed = latest_physics.get('speed_kmh', 0)
                 
@@ -284,7 +294,7 @@ def main():
             # ----------------------------------------
             # 3. ALERT & TELEMETRY DISPATCH
             # ----------------------------------------
-            if latest_physics:
+            if latest_physics and isinstance(latest_physics, dict):
                 telemetry_payload = {
                     "jeepney_id": JEEPNEY_ID,
                     "timestamp": current_time,
