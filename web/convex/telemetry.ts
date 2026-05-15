@@ -11,6 +11,13 @@ export const insert = mutation({
     accelZ: v.number(),
     speedKmh: v.optional(v.number()),
     timestamp: v.number(),
+    // New fields from edge device (optional for backward compatibility)
+    accel_x: v.optional(v.number()),
+    accel_y: v.optional(v.number()),
+    accel_z: v.optional(v.number()),
+    ear_value: v.optional(v.number()),
+    rolling_max: v.optional(v.number()),
+    rolling_std: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("telemetry", args);

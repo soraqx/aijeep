@@ -41,54 +41,67 @@ http.route({
     try {
       const payload = await request.json();
 
-      // Validate required fields from Python edge script
-      // NOTE: Use explicit undefined/null checks, not falsy checks (lat/lon can be 0!)
-      if (
-        payload.jeepney_id === undefined ||
-        payload.jeepney_id === null ||
-        payload.lat === undefined ||
-        payload.lat === null ||
-        payload.lon === undefined ||
-        payload.lon === null ||
-        payload.timestamp === undefined ||
-        payload.timestamp === null
-      ) {
-        return jsonResponse(
-          {
-            success: false,
-            error: "Missing required fields: jeepney_id, lat, lon, timestamp",
-          },
-          400
-        );
-      }
+       // Validate required fields from Python edge script
+       // NOTE: Use explicit undefined/null checks, not falsy checks (lat/lon can be 0!)
+       if (
+         payload.jeepney_id === undefined ||
+         payload.jeepney_id === null ||
+         payload.lat === undefined ||
+         payload.lat === null ||
+         payload.lon === undefined ||
+         payload.lon === null ||
+         payload.timestamp === undefined ||
+         payload.timestamp === null
+       ) {
+         return jsonResponse(
+           {
+             success: false,
+             error: "Missing required fields: jeepney_id, lat, lon, timestamp",
+           },
+           400
+         );
+       }
 
-      // Map payload from Python format to Convex schema format
-      // Python sends: jeepney_id, lat, lon, speed, timestamp, status
-      const gpsString = `${payload.lat},${payload.lon}`;
-      const timestamp = Math.floor(payload.timestamp * 1000); // Convert seconds to milliseconds
+       // Map payload from Python format to Convex schema format
+       // Python sends: jeepney_id, lat, lon, speed, timestamp, status
+       // Plus new fields: accel_x, accel_y, accel_z, ear_value, rolling_max, rolling_std
+       const gpsString = `${payload.lat},${payload.lon}`;
+       const timestamp = Math.floor(payload.timestamp * 1000); // Convert seconds to milliseconds
 
-      // Get or create jeepney by ID (assuming jeepney_id is a valid Convex ID)
-      let jeepneyId = payload.jeepney_id;
+       // Get or create jeepney by ID (assuming jeepney_id is a valid Convex ID)
+       let jeepneyId = payload.jeepney_id;
 
-      // If we receive string ID, try to use it directly; otherwise handle lookup if needed
-      // For now, assume jeepney_id is the valid Convex ID format
-      if (typeof jeepneyId !== "string" || !jeepneyId) {
-        return jsonResponse(
-          { success: false, error: "Invalid jeepney_id format" },
-          400
-        );
-      }
+       // If we receive string ID, try to use it directly; otherwise handle lookup if needed
+       // For now, assume jeepney_id is the valid Convex ID format
+       if (typeof jeepneyId !== "string" || !jeepneyId) {
+         return jsonResponse(
+           { success: false, error: "Invalid jeepney_id format" },
+           400
+         );
+       }
 
-      const telemetryId = await ctx.runMutation(api.telemetry.insert, {
-        jeepneyId: jeepneyId as any, // Type assertion for string → ID
-        gps: gpsString,
-        earValue: payload.earValue || 0, // Default if not provided
-        accelX: payload.accelX || 0,
-        accelY: payload.accelY || 0,
-        accelZ: payload.accelZ || 0,
-        speedKmh: payload.speed || 0, // Map 'speed' to 'speedKmh'
-        timestamp,
-      });
+       // Map field names from Python format to Convex schema format
+       // Prefer new field names, fall back to old ones for backward compatibility
+       const earValue = payload.ear_value !== undefined ? payload.ear_value : payload.earValue || 0;
+       const accelX = payload.accel_x !== undefined ? payload.accel_x : payload.accelX || 0;
+       const accelY = payload.accel_y !== undefined ? payload.accel_y : payload.accelY || 0;
+       const accelZ = payload.accel_z !== undefined ? payload.accel_z : payload.accelZ || 0;
+       const speedKmh = payload.speed !== undefined ? payload.speed : 0; // Map 'speed' to 'speedKmh'
+       
+       // New fields (optional in schema)
+       const rollingMax = payload.rolling_max !== undefined ? payload.rolling_max : 0;
+       const rollingStd = payload.rolling_std !== undefined ? payload.rolling_std : 0;
+
+       const telemetryId = await ctx.runMutation(api.telemetry.insert, {
+         jeepneyId: jeepneyId as any, // Type assertion for string → ID
+         gps: gpsString,
+         earValue: earValue,
+         accelX: accelX,
+         accelY: accelY,
+         accelZ: accelZ,
+         speedKmh: speedKmh,
+         timestamp,
+       });
 
       console.log(`[HTTP] Telemetry received: ${jeepneyId} at ${gpsString}`);
       return jsonResponse({ success: true, telemetryId });

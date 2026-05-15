@@ -52,8 +52,6 @@ KINEMATIC_MODEL_PATH = os.environ.get("KINEMATIC_MODEL_PATH", "kinematic_rfc.pkl
 BACKEND_ALERT_UPLOAD_URL = os.environ.get("BACKEND_ALERT_UPLOAD_URL", f"{CONVEX_SITE_URL}/api/upload-alert")
 
 
-
-
 # --- Matched to Training Script Windows ---
 FPS_VISION = 15
 FPS_KINEMATIC = 5
@@ -120,7 +118,7 @@ def telemetry_worker():
         if payload is None: break 
         try:
             req = urllib.request.Request(TELEMETRY_URL, data=json.dumps(payload).encode('utf-8'),
-                                         headers={'Content-Type': 'application/json'})
+                                          headers={'Content-Type': 'application/json'})
             response = urllib.request.urlopen(req, timeout=3.0)
             response_body = response.read().decode('utf-8')
             print(f"[Network] Telemetry sent: {response.status} - {response_body}")
@@ -211,6 +209,7 @@ def main():
     n_ear_buffer = deque(maxlen=VISION_WINDOW_VAR)
     
     last_snapshot_time = 0
+    last_telemetry_time = 0
     SNAPSHOT_COOLDOWN = 5.0
     
     # Latest sensor values for telemetry
@@ -224,6 +223,11 @@ def main():
 
     # Frame rate throttling
     target_frame_time = 1.0 / FPS_VISION  # ~66ms for 15 fps
+
+    # Default tracking variables for telemetry
+    current_ear = 0.0
+    current_rolling_max = 0.0
+    current_rolling_std = 0.0
 
     try:
         while True:
@@ -252,6 +256,9 @@ def main():
                     rolling_max = max(accel_y_buffer)
                     # ddof=1 ensures match with pandas .std()
                     rolling_std = np.std(accel_y_buffer, ddof=1) if len(accel_y_buffer) > 1 else 0.0 
+                    # Update tracking variables for telemetry
+                    current_rolling_max = rolling_max
+                    current_rolling_std = rolling_std
                     
                     # Order: ["Accel_rolling_max", "Accel_rolling_std", "speed_kmh"]
                     X_phys = np.array([[rolling_max, rolling_std, speed]]) 
@@ -274,22 +281,20 @@ def main():
                     ear = compute_ear(landmarks)
                     
                     if math.isfinite(ear):
+                        current_ear = ear   # Update for telemetry
                         # PHASE A: Calibration (Establish Baseline)
                         if ear_baseline is None:
                             ear_calibration_buffer.append(ear)
                             if len(ear_calibration_buffer) % 15 == 0:
                                 print(f"Calibrating Vision... {len(ear_calibration_buffer)}/{VISION_BASELINE_FRAMES} frames")
-                                
+                            
                             if len(ear_calibration_buffer) == VISION_BASELINE_FRAMES:
                                 ear_baseline = sum(ear_calibration_buffer) / len(ear_calibration_buffer)
                                 print(f"\n✅ CALIBRATION COMPLETE! Baseline EAR: {ear_baseline:.3f}")
                                 print("System is now actively monitoring driver state.\n")
-                        
+                            
                         # PHASE B: Active Prediction
                         else:
-                            # Store latest ear value for telemetry
-                            latest_ear = ear
-                            
                             n_ear = ear / ear_baseline
                             n_ear_buffer.append(n_ear)
 
@@ -313,20 +318,24 @@ def main():
             # 3. ALERT & TELEMETRY DISPATCH
             # ----------------------------------------
             if latest_physics and isinstance(latest_physics, dict):
-                telemetry_payload = {
-                    "jeepney_id": JEEPNEY_ID,
-                    "timestamp": current_time,
-                    "status": alert_type,
-                    "lat": latest_physics.get('lat', 0),
-                    "lon": latest_physics.get('lon', 0),
-                    "speed": latest_physics.get('speed_kmh', 0)
-                }
-                telemetry_queue.put(telemetry_payload)
-
-            if alert_triggered and (current_time - last_snapshot_time > SNAPSHOT_COOLDOWN):
-                print(f"⚠️ DANGER DETECTED: {alert_type}! Uploading snapshot...")
-                snapshot_queue.put((frame.copy(), alert_type, current_time))
-                last_snapshot_time = current_time
+                # FIX 1: Only send data once per second to save the CPU!
+                if current_time - last_telemetry_time >= TELEMETRY_INTERVAL_SEC:
+                    telemetry_payload = {
+                        "jeepney_id": JEEPNEY_ID,
+                        "timestamp": current_time,
+                        "status": alert_type,
+                        "lat": latest_physics.get('lat', 0),
+                        "lon": latest_physics.get('lon', 0),
+                        "speed": latest_physics.get('speed_kmh', 0),
+                        "accel_x": latest_accel_x,
+                        "accel_y": latest_accel_y,
+                        "accel_z": latest_accel_z,
+                        "ear_value": current_ear,
+                        "rolling_max": current_rolling_max,
+                        "rolling_std": current_rolling_std
+                    }
+                    telemetry_queue.put(telemetry_payload)
+                    last_telemetry_time = current_time
 
             # Frame rate throttling: maintain ~15 fps for vision processing
             frame_elapsed = time.time() - frame_start
