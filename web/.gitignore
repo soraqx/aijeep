@@ -1,2 +1,6 @@
 
 .env.local
+.cursor/
+.sixth/
+edge/datasets/*
+*.mp4
