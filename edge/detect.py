@@ -216,9 +216,13 @@ def main():
     print("\n[System] AI-JEEP Active.")
     print(">>> DRIVER CALIBRATION REQUIRED: Please look forward normally for 15 seconds. <<<\n")
 
+    # Frame rate throttling
+    target_frame_time = 1.0 / FPS_VISION  # ~66ms for 15 fps
+
     try:
         while True:
-            current_time = time.time()
+            frame_start = time.time()
+            current_time = frame_start
             alert_triggered = False
             alert_type = "NORMAL"
 
@@ -309,6 +313,12 @@ def main():
                 print(f"⚠️ DANGER DETECTED: {alert_type}! Uploading snapshot...")
                 snapshot_queue.put((frame.copy(), alert_type, current_time))
                 last_snapshot_time = current_time
+
+            # Frame rate throttling: maintain ~15 fps for vision processing
+            frame_elapsed = time.time() - frame_start
+            sleep_time = target_frame_time - frame_elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 
     except KeyboardInterrupt:
         print("\n[System] Shutting down safely...")
