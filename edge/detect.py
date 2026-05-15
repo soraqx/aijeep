@@ -211,7 +211,13 @@ def main():
     n_ear_buffer = deque(maxlen=VISION_WINDOW_VAR)
     
     last_snapshot_time = 0
-    SNAPSHOT_COOLDOWN = 5.0 
+    SNAPSHOT_COOLDOWN = 5.0
+    
+    # Latest sensor values for telemetry
+    latest_accel_x = 0.0
+    latest_accel_y = 0.0
+    latest_accel_z = 0.0
+    latest_ear = 0.0 
 
     print("\n[System] AI-JEEP Active.")
     print(">>> DRIVER CALIBRATION REQUIRED: Please look forward normally for 15 seconds. <<<\n")
@@ -233,6 +239,11 @@ def main():
             if latest_physics and isinstance(latest_physics, dict):
                 accel_y = latest_physics.get('accel_y', 0)
                 speed = latest_physics.get('speed_kmh', 0)
+                
+                # Store latest accel values for telemetry
+                latest_accel_x = latest_physics.get('accel_x', 0.0)
+                latest_accel_y = accel_y
+                latest_accel_z = latest_physics.get('accel_z', 0.0)
                 
                 accel_y_buffer.append(accel_y)
 
@@ -271,6 +282,9 @@ def main():
                                 
                             if len(ear_calibration_buffer) == VISION_BASELINE_FRAMES:
                                 ear_baseline = sum(ear_calibration_buffer) / len(ear_calibration_buffer)
+                            # Store latest ear value for telemetry
+                            latest_ear = ear
+                            
                                 print(f"\n✅ CALIBRATION COMPLETE! Baseline EAR: {ear_baseline:.3f}")
                                 print("System is now actively monitoring driver state.\n")
                         
