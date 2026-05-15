@@ -41,18 +41,49 @@ http.route({
     try {
       const payload = await request.json();
 
+      // Validate required fields from Python edge script
+      if (!payload.jeepney_id || !payload.lat || !payload.lon || payload.timestamp === undefined) {
+        return jsonResponse(
+          {
+            success: false,
+            error: "Missing required fields: jeepney_id, lat, lon, timestamp",
+          },
+          400
+        );
+      }
+
+      // Map payload from Python format to Convex schema format
+      // Python sends: jeepney_id, lat, lon, speed, timestamp, status
+      const gpsString = `${payload.lat},${payload.lon}`;
+      const timestamp = Math.floor(payload.timestamp * 1000); // Convert seconds to milliseconds
+
+      // Get or create jeepney by ID (assuming jeepney_id is a valid Convex ID)
+      let jeepneyId = payload.jeepney_id;
+
+      // If we receive string ID, try to use it directly; otherwise handle lookup if needed
+      // For now, assume jeepney_id is the valid Convex ID format
+      if (typeof jeepneyId !== "string" || !jeepneyId) {
+        return jsonResponse(
+          { success: false, error: "Invalid jeepney_id format" },
+          400
+        );
+      }
+
       const telemetryId = await ctx.runMutation(api.telemetry.insert, {
-        jeepneyId: payload.jeepneyId,
-        gps: payload.gps,
-        earValue: payload.earValue,
-        accelX: payload.accelX,
-        accelY: payload.accelY,
-        accelZ: payload.accelZ,
-        timestamp: payload.timestamp,
+        jeepneyId: jeepneyId as any, // Type assertion for string → ID
+        gps: gpsString,
+        earValue: payload.earValue || 0, // Default if not provided
+        accelX: payload.accelX || 0,
+        accelY: payload.accelY || 0,
+        accelZ: payload.accelZ || 0,
+        speedKmh: payload.speed || 0, // Map 'speed' to 'speedKmh'
+        timestamp,
       });
 
+      console.log(`[HTTP] Telemetry received: ${jeepneyId} at ${gpsString}`);
       return jsonResponse({ success: true, telemetryId });
     } catch (error) {
+      console.error("[HTTP] Telemetry error:", error);
       const message =
         error instanceof Error ? error.message : "Invalid telemetry payload";
       return jsonResponse({ success: false, error: message }, 400);
@@ -94,45 +125,59 @@ http.route({
   handler: preflightHandler,
 });
 
+
 http.route({
   path: "/api/upload-alert",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     try {
-      // Parse multipart form data
-      const formData = await request.formData();
+      // Handle raw image bytes with headers (from Python edge script)
+      const contentType = request.headers.get("content-type");
+      const alertType = request.headers.get("x-alert-type");
+      const jeepneyId = request.headers.get("x-jeepney-id");
+      const timestamp = request.headers.get("x-timestamp");
 
-      const image = formData.get("image") as File;
-      const jeepneyId = formData.get("jeepneyId") as string;
-      const alertType = formData.get("alertType") as string;
-      const timestamp = parseInt(formData.get("timestamp") as string);
-      const filename = formData.get("filename") as string;
-
-      // Validate inputs
-      if (!image || !jeepneyId || !alertType || !timestamp) {
+      // Validate required headers
+      if (!alertType || !jeepneyId || !timestamp) {
         return jsonResponse(
-          { error: "Missing required fields: image, jeepneyId, alertType, timestamp" },
+          {
+            error:
+              "Missing required headers: X-Alert-Type, X-Jeepney-Id, X-Timestamp",
+          },
           400
         );
       }
 
+      // Parse timestamp (might be seconds or milliseconds)
+      let parsedTimestamp = parseInt(timestamp as string);
+      if (parsedTimestamp < 10000000000) {
+        // If < year 2286 in seconds, convert to milliseconds
+        parsedTimestamp = parsedTimestamp * 1000;
+      }
+
+      // Get raw image bytes
+      const imageBuffer = await request.arrayBuffer();
+
+      if (imageBuffer.byteLength === 0) {
+        return jsonResponse({ error: "Empty image buffer" }, 400);
+      }
+
       // Store image in Convex file storage
-      const imageBuffer = await image.arrayBuffer();
       const storageId = await ctx.storage.store(
-        new Blob([imageBuffer], { type: "image/jpeg" })
+        new Blob([imageBuffer], { type: contentType || "image/jpeg" })
       );
 
       // Generate mock confidence score (in production: from model output)
       const confidenceScore = Math.random() * 0.3 + 0.7; // 70-100%
 
-      // Create alert record with image reference (in one atomic operation)
+      // Create alert record with image reference
       const alertId = await ctx.runMutation(api.alerts.insertAlertWithSnapshot, {
         jeepneyId: jeepneyId as any,
         alertType,
-        timestamp,
+        timestamp: parsedTimestamp,
         confidenceScore,
         snapshotStorageId: storageId,
-        snapshotFilename: filename || `alert_${timestamp}.jpg`,
+        snapshotFilename: `alert_${jeepneyId}_${parsedTimestamp}.jpg`,
       });
 
       console.log(
@@ -142,6 +187,7 @@ http.route({
       return jsonResponse({
         success: true,
         alertId,
+        storageId,
         message: "Snapshot received and stored",
       });
     } catch (error) {
