@@ -282,14 +282,14 @@ def main():
                                 
                             if len(ear_calibration_buffer) == VISION_BASELINE_FRAMES:
                                 ear_baseline = sum(ear_calibration_buffer) / len(ear_calibration_buffer)
-                            # Store latest ear value for telemetry
-                            latest_ear = ear
-                            
                                 print(f"\n✅ CALIBRATION COMPLETE! Baseline EAR: {ear_baseline:.3f}")
                                 print("System is now actively monitoring driver state.\n")
                         
                         # PHASE B: Active Prediction
                         else:
+                            # Store latest ear value for telemetry
+                            latest_ear = ear
+                            
                             n_ear = ear / ear_baseline
                             n_ear_buffer.append(n_ear)
 
